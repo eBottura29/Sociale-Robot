@@ -5,8 +5,61 @@ AMPLITUDE = int(32767 * 0.5)
 TIME_PER_BIT = 0.05
 BIT_FREQ = 1000
 
-WAKE_PATTERN = 0b10101010  # 8 bits (10101010)
-DATA_32 = 0b01010110110111010101100110011101  # 32 bits payload (mss meer in de toekomst idk)
+WAKE_PATTERN = 0xBD  # 10111101 in binary (8 bits)
+END_X = -102.412
+END_Y = -90.112
+
+
+# ---- convert end values to binary (two's complement Q7.8 format) ----
+FRACTION_BITS = 8
+SCALE = 1 << FRACTION_BITS
+
+MIN_INT = -32768
+MAX_INT = 32767
+
+
+def float_to_q7_8(x: float) -> int:
+    # scale and round to nearest fixed point integer
+    fixed = int(round(x * SCALE))
+
+    # saturate to int16 range
+    if fixed > MAX_INT:
+        fixed = MAX_INT
+    elif fixed < MIN_INT:
+        fixed = MIN_INT
+
+    # return as unsigned 16 bit value
+    return fixed & 0xFFFF
+
+
+# pack two 16 bit values into one 32 bit word
+DATA_32 = (float_to_q7_8(END_X) << 16) | float_to_q7_8(END_Y)
+
+print(f"DATA_32 = 0x{DATA_32:08X}")
+print(f"DATA_32 (bin) = {DATA_32:032b}")
+
+# example of the decoding procedure
+# def q7_8_to_float(value: int) -> float:
+#     # interpret unsigned 16-bit as signed int16
+#     if value & 0x8000:
+#         value -= 0x10000
+
+#     return value / SCALE
+
+
+# def unpack_data_32(data32: int) -> tuple[float, float]:
+#     # extract raw 16-bit values
+#     raw_x = (data32 >> 16) & 0xFFFF
+#     raw_y = data32 & 0xFFFF
+
+#     # convert from Q7.8 to float
+#     x = q7_8_to_float(raw_x)
+#     y = q7_8_to_float(raw_y)
+
+#     return x, y
+
+
+# print(unpack_data_32(DATA_32))
 
 
 def build_frame(wake, data32):
@@ -14,7 +67,6 @@ def build_frame(wake, data32):
     Frame layout:
     [ 8 bits wake ][ 32 bits data ][ 16 bits XOR checksum ]
     """
-
     checksum = ((data32 >> 16) ^ (data32 & 0xFFFF)) & 0xFFFF
 
     return wake.to_bytes(1, "big") + data32.to_bytes(4, "big") + checksum.to_bytes(2, "big")
@@ -66,7 +118,13 @@ def main():
     with open("./src/gsm_app/preview.wav", "wb") as f:
         f.write(data)
 
-    print(f"Saved preview.wav | " f"{total_bits} bits | " f"wake=0x{WAKE_PATTERN:02X} " f"data=0x{DATA_32:08X}")
+    print(
+        f"Saved preview.wav | "
+        f"{total_bits} bits | "
+        f"wake=0x{WAKE_PATTERN:02X} "
+        f"data=0x{DATA_32:08X}"
+    )
+    print("Frame bits:")
     print("".join(f"{byte:08b}" for byte in frame))
 
 
