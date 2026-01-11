@@ -5,7 +5,7 @@ AMPLITUDE = int(32767 * 0.5)
 TIME_PER_BIT = 0.05
 BIT_FREQ = 1000
 
-WAKE_PATTERN = 0xBD  # 10111101 in binary (8 bits)
+WAKE_PATTERN = 0xD5AA  # 1101010110101010 in binary (16 bits), computed as the best (most unique) wake pattern for 16 bits
 END_X = -102.412
 END_Y = -90.112
 
@@ -69,7 +69,7 @@ def build_frame(wake, data32):
     """
     checksum = ((data32 >> 16) ^ (data32 & 0xFFFF)) & 0xFFFF
 
-    return wake.to_bytes(1, "big") + data32.to_bytes(4, "big") + checksum.to_bytes(2, "big")
+    return wake.to_bytes(2, "big") + data32.to_bytes(4, "big") + checksum.to_bytes(2, "big")
 
 
 def main():
@@ -121,7 +121,7 @@ def main():
     print(
         f"Saved preview.wav | "
         f"{total_bits} bits | "
-        f"wake=0x{WAKE_PATTERN:02X} "
+        f"wake=0x{WAKE_PATTERN:04X} "
         f"data=0x{DATA_32:08X}"
     )
     print("Frame bits:")
