@@ -2,8 +2,8 @@ import math
 
 FREQ = 44100  # sample rate
 AMPLITUDE = int(32767 * 0.5)
-TIME_PER_BIT = 1 / 8000
-BIT_FREQ = 35000
+TIME_PER_BIT = 0.1
+BIT_FREQ = 600
 
 WAKE_PATTERN = 0xD5AA  # 1101010110101010 in binary (16 bits), computed as the best (most unique) wake pattern for 16 bits
 END_X = -102.412
