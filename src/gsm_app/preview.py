@@ -2,8 +2,8 @@ import math
 
 FREQ = 44100  # sample rate
 AMPLITUDE = int(32767 * 0.5)
-TIME_PER_BIT = 0.1
-BIT_FREQ = 600
+TIME_PER_BIT = 300
+BIT_FREQ = 440
 
 WAKE_PATTERN = 0xD5AA  # 1101010110101010 in binary (16 bits), computed as the best (most unique) wake pattern for 16 bits
 VALUE_ONE = 1.3
@@ -73,9 +73,11 @@ def build_frame(wake, data32):
 
 
 def main():
+    global BIT_FREQ
+
     frame = build_frame(WAKE_PATTERN, DATA_32)
 
-    samples_per_bit = int(FREQ * TIME_PER_BIT)
+    samples_per_bit = int(FREQ * TIME_PER_BIT / 1000)
     total_bits = len(frame) * 8
     total_samples = samples_per_bit * total_bits
 
@@ -118,7 +120,12 @@ def main():
     with open("./src/gsm_app/preview.wav", "wb") as f:
         f.write(data)
 
-    print(f"Saved preview.wav | " f"{total_bits} bits | " f"wake=0x{WAKE_PATTERN:04X} " f"data=0x{DATA_32:08X}")
+    print(
+        f"Saved preview.wav | "
+        f"{total_bits} bits | "
+        f"wake=0x{WAKE_PATTERN:04X} "
+        f"data=0x{DATA_32:08X}"
+    )
     print("Frame bits:")
     print("".join(f"{byte:08b}" for byte in frame))
 
