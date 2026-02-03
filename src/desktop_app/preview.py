@@ -117,7 +117,7 @@ def main():
 
                 data.extend(value.to_bytes(2, "little", signed=True))
 
-    with open("./src/gsm_app/preview.wav", "wb") as f:
+    with open("./src/desktop_app/preview.wav", "wb") as f:
         f.write(data)
 
     print(
