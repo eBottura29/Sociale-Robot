@@ -536,7 +536,7 @@ Vaartdijkstraat 3, Brugge, België
 | Naam | Rol | Email | Discord |
 |------|-----|-------|---------|
 | **Enrico Stefanuto Bottura** | Hoofd Programmeur, Planner/Organiser, Elektrische Schakeling | enrico.stefanutobott@vtibrugge.be | @eBottura |
-| **Sam de Waele** | 2e Programmeur, Hoofd Elektrische Schakeling | sam.dewaele@vtibrugge.be | @de_crusader |
+| **Sam de Waele** | 2e Programmeur, Hoofd Elektrische Schakeling,Onderzoeker van regelementen | sam.dewaele@vtibrugge.be | @de_crusader |
 | **Yesse Dirk Paul Jozef Geeraert** | Design Helper, Wiel Designer, Emotionele Support | yesse.geeraert@vtibrugge.be | @sylq. |
 | **Razvan Marian Aioanei** | Hoofd Designer, Graphical Designer, Hoofd Romeens | razvan.marianaioanei@vtibrugge.be | @boiiiiiiiiiiiiiiiiiiiiiiiiii |
 
