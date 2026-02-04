@@ -351,7 +351,7 @@ numpy>=1.24.0
 
 ### 2. Start de Desktop App
 ```bash
-cd laptop_app
+cd desktop_app
 python main.py
 ```
 
