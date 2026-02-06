@@ -1,4 +1,4 @@
-# NIER - Neural Interactive Emotional Robot
+﻿# NIER - Neural Interactive Emotional Robot
 
 [![Dwenguino](https://img.shields.io/badge/Platform-Dwenguino-orange)](https://www.dwengo.org/)
 [![Arduino](https://img.shields.io/badge/Arduino-Compatible-blue)](https://www.arduino.cc/)
@@ -22,7 +22,7 @@
 - [Software Componenten](#software-componenten)
 - [Installatie](#installatie)
 - [Gebruik](#gebruik)
-- [Creatieve Ideeën & Toekomstige Uitbreidingen](#creatieve-ideeën--toekomstige-uitbreidingen)
+- [Creatieve Ideeen & Toekomstige Uitbreidingen](#creatieve-ideeen--toekomstige-uitbreidingen)
 - [Technische Overwegingen](#technische-overwegingen)
 - [Team](#team)
 - [Contact](#contact)
@@ -31,7 +31,7 @@
 
 ## Over het Project
 
-NIER is een sociale companion robot die ontworpen is om eenzaamheid te bestrijden door menselijke interactie na te bootsen en gezelschap te bieden. De robot combineert kunstmatige intelligentie, emotionele verwerking en fysieke aanwezigheid om een engagerend en ondersteunend companion te creëren.
+NIER is een sociale companion robot die ontworpen is om eenzaamheid te bestrijden door menselijke interactie na te bootsen en gezelschap te bieden. De robot combineert kunstmatige intelligentie, emotionele verwerking en fysieke aanwezigheid om een engagerend en ondersteunend companion te creeren.
 
 Het project maakt gebruik van:
 - **Dwenguino microcontroller** voor robotcontrole
@@ -58,7 +58,7 @@ Onze sociale robot biedt:
 - **Fysieke aanwezigheid** - meer dan alleen een scherm of stem
 - **Interactief gedrag** - beweegt, piept en toont emoties
 
-### Andere Potentiële Toepassingen
+### Andere Potentiele Toepassingen
 
 Dit robotconcept kan ook ingezet worden voor:
 - **Dementiezorg** - gezelschap en geheugenondersteuning voor ouderen
@@ -73,10 +73,10 @@ Dit robotconcept kan ook ingezet worden voor:
 ## Kenmerken
 
 ### Conversatie & AI
-- Natuurlijke gesprekken via LLM (HuggingFace of alternatief)
-- Emotie-detectie en -verwerking van conversaties
+- Natuurlijke gesprekken via LLM (HuggingFace, lokaal)
+- Emotie-detectie en -verwerking van conversaties (nlptown/bert-base-multilingual-uncased-sentiment)
 - Desktop applicatie voor tekstcommunicatie
-- Real-time communicatie via seriële verbinding (PySerial)
+- Real-time communicatie via seriele verbinding (PySerial)
 
 ### Emotionele Expressie
 - **3x LED Matrices** voor visuele emoties:
@@ -94,75 +94,24 @@ Dit robotconcept kan ook ingezet worden voor:
   - Kan ook stats weergeven (nog te bepalen)
 
 ### Navigatie & Sensoren
-- **2x Sonar Sensors** gemonteerd op 180° servo
+- **2x Sonar Sensors** gemonteerd op 180Â° servo
   - Meten afstand tot objecten
   - Data wordt naar laptop gestuurd voor navigatiebeslissingen
   
 - **Tank Rups Systeem** (4 wielen met loopbanden)
-  - Bestuurd door 2x 360° continue servos (één per kant)
+  - Bestuurd door 2x 360Â° continue servos (een per kant)
   - Navigeert naar locaties bepaald door laptop
 
 ### Extra Features
 - **RGB LED** - Debugging of visuele effecten
 - **Buzzer** - R2D2-achtige piepjes voor acties en feedback
-- **Bidirectionele communicatie** - Robot ↔ Laptop via seriële verbinding
+- **Bidirectionele communicatie** - Robot â†” Laptop via seriele verbinding
 
 ---
 
-## Systeemarchitectuur
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                         LAPTOP                              │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │           Desktop Applicatie (Python)               │    │
-│  │                                                     │    │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌─────────┐    │    │
-│  │  │  LLM Model   │  │   Emotie     │  │  GUI    │    │    │
-│  │  │ (HuggingFace)│  │ Verwerking   │  │Interface│    │    │
-│  │  │              │  │      AI      │  │         │    │    │
-│  │  └──────┬───────┘  └──────┬───────┘  └─────┬───┘    │    │
-│  │         │                 │                │        │    │
-│  │         └─────────┬───────┴────────────────┘        │    │
-│  │                   │                                 │    │
-│  │         ┌─────────▼──────────┐                      │    │
-│  │         │ Navigatie Logica   │                      │    │
-│  │         │ (Sonar Data → Pad) │                      │    │
-│  │         └─────────┬──────────┘                      │    │
-│  └───────────────────┼─────────────────────────────────┘    │
-└────────────────────┼─┼──────────────────────────────────────┘
-                     │ │
-              ┌──────▼─▼───────┐
-              │ Serial Monitor │
-              │  (USB Kabel)   │
-              └──────┬─┬───────┘
-                     │ │
-┌────────────────────▼─▼────────────────────────────────────┐
-│                    DWENGUINO / ROBOT                      │
-│  ┌─────────────────────────────────────────────────────┐  │
-│  │              Microcontroller Firmware               │  │
-│  │                                                     │  │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │  │
-│  │  │   Input     │  │  Verwerking │  │   Output    │  │  │
-│  │  │ Handlers    │  │   Logica    │  │  Control    │  │  │
-│  │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  │  │
-│  └─────────┼────────────────┼────────────────┼─────────┘  │
-│            │                │                │            │
-│  ┌─────────▼──────┐  ┌──────▼──────┐  ┌──────▼──────┐     │
-│  │ Sonar Sensors  │  │ LED Matrices│  │   Servos    │     │
-│  │  (op servo)    │  │  (3x 8x8)   │  │ (2x Continu)│     │
-│  └────────────────┘  └─────────────┘  └─────────────┘     │
-│                                                           │
-│  ┌────────────────┐  ┌─────────────┐  ┌─────────────┐     │
-│  │  LCD Display   │  │   RGB LED   │  │   Buzzer    │     │
-│  │   (2x16)       │  │ (Debugging) │  │  (Geluiden) │     │
-│  └────────────────┘  └─────────────┘  └─────────────┘     │
-└───────────────────────────────────────────────────────────┘
-```
-
 ### Communicatieflow
 
-1. **Gebruiker → Laptop**: Typt bericht in desktop app
+1. **Gebruiker - Laptop**: Typt bericht in desktop app
 2. **Laptop**: 
    - LLM genereert antwoord
    - Emotie AI analyseert conversatie
@@ -171,7 +120,7 @@ Dit robotconcept kan ook ingezet worden voor:
    - Ontvangt emotie-data en bewegingscommando's
    - Update LED matrices (emoties)
    - Toont antwoord op LCD
-   - Sonar data → terug naar laptop
+   - Sonar data â†’ terug naar laptop
 4. **Laptop**: Verwerkt sonar data voor navigatiebeslissingen
 
 ---
@@ -188,17 +137,17 @@ Dit robotconcept kan ook ingezet worden voor:
 
 ### Sensoren
 - **2x Ultrasone Sonar Sensors (HC-SR04)** - Afstandsmeting
-- **3x 180° Servo Motor** - Een voor sonar pan/tilt mechanisme en twee resterende voor wenkbrauwen
+- **3x 180Â° Servo Motor** - Een voor sonar pan/tilt mechanisme en twee resterende voor wenkbrauwen
 
 ### Aandrijving
-- **2x 360° Continue Servo Motors** - Tank aandrijving (links/rechts)
+- **2x 360Â° Continue Servo Motors** - Tank aandrijving (links/rechts)
 - **4x Wielen** - Tank rups/loopband systeem
 
 ### Audio
 - **1x Buzzer** - R2D2-achtige geluiden
 
 ### Communicatie
-- **USB Kabel (USB-A --> MICRO USB)** - Seriële verbinding met laptop
+- **USB Kabel (USB-A --> MICRO USB)** - Seriele verbinding met laptop
 
 ### Voeding
 - **USB Kabel (USB-A --> MICRO USB)** - Diezelfde verbinding met laptop
@@ -212,22 +161,23 @@ Dit robotconcept kan ook ingezet worden voor:
 #### 1. Desktop Applicatie
 ```
 Desktop App Features:
-├── GUI Interface (tkinter)
-│   ├── Tekstinvoer venster
-│   └── Emotie/stats visualisatie
-├── LLM Integratie
-│   ├── HuggingFace API verbinding
-│   └── Prompt engineering
-├── Emotie Verwerking AI
-│   ├── Sentiment analyse
-│   ├── Emotie classificatie
-│   └── Stats berekening (honger, moeheid, etc.)
-└── Seriële Communicatie
-    ├── Arduino Serial protocol
-    └── Commando formatting
+- GUI Interface (tkinter)
+  - Tekstinvoer venster
+  - Emotie/stats visualisatie
+- LLM Integratie
+  - HuggingFace model lokaal (transformers)
+  - Prompt engineering
+- Emotie Verwerking AI
+  - Sentiment analyse
+  - Emotie classificatie
+  - Stats berekening (honger, moeheid, etc.)
+- Seriele Communicatie
+  - Arduino Serial protocol
+  - Commando formatting
 ```
 
 #### 2. LLM Opties (Gratis)
+**Actuele implementatie:** GroNLP/gpt2-small-dutch (lokaal)
 Mogelijke gratis LLM's via HuggingFace:
 - **GPT-2** - Lichtgewicht, snel
 - **BLOOM** - Meertalig (Nederlands!)
@@ -239,7 +189,7 @@ Mogelijke gratis LLM's via HuggingFace:
 - **Sentiment Analysis Models**:
   - `nlptown/bert-base-multilingual-uncased-sentiment`
   - `cardiffnlp/twitter-roberta-base-sentiment`
-- **Output**: Emotie scores → LED matrix patterns
+- **Output**: Emotie scores -> LED matrix patterns
 
 #### 4. Navigatie Logica
 ```python
@@ -258,32 +208,32 @@ else:
 #### Firmware Structuur
 ```cpp
 // Hoofdcomponenten
-├── setup()
-│   ├── Initialiseer LED matrices
-│   ├── Initialiseer LCD
-│   ├── Initialiseer servos
-│   ├── Initialiseer sonars
-│   └── Start seriële communicatie
-├── loop()
-│   ├── Lees seriële commando's
-│   ├── Update emotie displays
-│   ├── Control beweging
-│   ├── Lees sonar data
-└── └── Stuur data terug
+- setup()
+  - Initialiseer LED matrices
+  - Initialiseer LCD
+  - Initialiseer servos
+  - Initialiseer sonars
+  - Start seriele communicatie
+-  loop()
+  - Lees seriele commando's
+  - Update emotie displays
+  - Control beweging
+  - Lees sonar data
+  - Stuur data terug
 
 ```
 
 #### Emotie Patterns voor LED Matrices
 ```cpp
 // Voorbeelden van emotie patronen
-Happiness:    😊 (Smile pattern)
-Sadness:      😢 (Tears + frown)
-Fatigue:      😴 (Closed eyes)
-Hunger:       🍔 (Empty battery icon)
-Anxiety:      😰 (Sweat drops)
-Affection:    😍 (Heart eyes)
-Curiosity:    🤔 (Raised eyebrow)
-Frustration:  😡 (Angry face)
+Happiness (Smile pattern)
+Sadness (Tears + frown)
+Fatigue (Closed eyes)
+Hunger (Empty battery icon)
+Anxiety (Sweat drops)
+Affection (Heart eyes)
+Curiosity (Raised eyebrow)
+Frustration (Angry face)
 ```
 
 ---
@@ -316,13 +266,18 @@ pip install -r requirements.txt
 **requirements.txt:**
 ```
 pyserial>=3.5
+transformers>=4.30.0
+torch>=2.0.0
+sentencepiece>=0.1.99
+```
+pyserial>=3.5
 tkinter
 ```
 
 ### Robot Setup
 
 1. Open `https://blockly.dwengo.org/`
-2. Importeer code van `src/robot/main/main.cpp`
+2. Importeer code van `src/robot/firmware/main.cpp`
 3. Druk op de RESET knop en dan op de S knop (dwenguino bord)
 4. Laat bijde knoppen los
 5. Klik op de "play" knop in de website
@@ -340,8 +295,7 @@ tkinter
 
 ### 2. Start de Desktop App
 ```bash
-cd desktop_app
-python main.py
+python src/desktop_app/main.py
 ```
 
 ### 3. Selecteer COM Poort
@@ -362,9 +316,9 @@ python main.py
 
 ---
 
-## Creatieve Ideeën & Toekomstige Uitbreidingen
+## Creatieve Ideeen & Toekomstige Uitbreidingen
 
-### Huidige Ideeën voor Verbetering
+### Huidige Ideeen voor Verbetering
 
 #### 1. **Gepersonaliseerde Geheugen**
 - Robot onthoudt vorige conversaties
@@ -381,8 +335,8 @@ python main.py
 - Komt naar je toe als je belt
 - Gaat "slapen" in oplaadstation
 
-#### 4. **Muziek/Melodieën**
-- Buzzer speelt herkenbare melodieën
+#### 4. **Muziek/Melodieen**
+- Buzzer speelt herkenbare melodieen
 - Verschillende tunes voor verschillende emoties
 - Reactie op muziek in omgeving (microfoon?)
 
@@ -419,25 +373,25 @@ python main.py
 ### RGB LED Toepassingen
 
 Mogelijke toepassingen voor de RGB LED:
-- 🔴 **Rood**: Laag batterij
-- 🟢 **Groen**: Alles OK / Verbonden
-- 🔵 **Blauw**: Aan het "denken" (LLM verwerkt)
-- 🟡 **Geel**: Wacht op input
-- 🟣 **Paars**: Navigatie modus
-- ⚪ **Wit**: Aandacht nodig
-- 🎨 **Regenboog**: Gelukkig/feestmodus
-- 🔶 **Oranje**: Waarschuwing (obstakel)
+- ðŸ”´ **Rood**: Laag batterij
+- ðŸŸ¢ **Groen**: Alles OK / Verbonden
+- ðŸ”µ **Blauw**: Aan het "denken" (LLM verwerkt)
+- ðŸŸ¡ **Geel**: Wacht op input
+- ðŸŸ£ **Paars**: Navigatie modus
+- âšª **Wit**: Aandacht nodig
+- ðŸŽ¨ **Regenboog**: Gelukkig/feestmodus
+- ðŸ”¶ **Oranje**: Waarschuwing (obstakel)
 
 ### Emotie Stats Verwerking
 
-Hoe emoties stats beïnvloeden:
+Hoe emoties stats beinvloeden:
 ```
-Happiness ↑ → Robot is energieker, beweegt meer
-Sadness ↑ → Langzamere bewegingen, rustiger
-Fatigue ↑ → Vraagt om "rust", dimmed LED's
-Hunger ↑ → Vraagt actief om interactie
-Anxiety ↑ → Voorzichtiger navigatie
-Affection ↑ → Blijft dichterbij gebruiker
+Happiness: Robot is energieker, beweegt meer
+Sadness: Langzamere bewegingen, rustiger
+Fatigue: Vraagt om "rust", dimmed LED's
+Hunger: Vraagt actief om interactie
+Anxiety: Voorzichtiger navigatie
+Affection: Blijft dichterbij gebruiker
 ```
 
 ---
@@ -451,10 +405,10 @@ Affection ↑ → Blijft dichterbij gebruiker
 - **Oplossing**: Krachtige Li-Po batterij (7.4V 2200mAh+)
 - Voeg laag batterij waarschuwing toe
 
-#### 2. **Seriële Communicatie Snelheid**
+#### 2. **Seriele Communicatie Snelheid**
 - LLM responses kunnen lang zijn voor LCD
 - **Oplossing**: Scroll text op LCD, of splits in chunks
-- Gebruik efficiënt protocol (JSON?)
+- Gebruik efficient protocol (JSON?)
 
 #### 3. **LLM Response Tijd**
 - Gratis HuggingFace API kan traag zijn
@@ -479,14 +433,6 @@ Affection ↑ → Blijft dichterbij gebruiker
   - Of toon alleen key phrases
 
 ### Voorgestelde Verbeteringen aan Huidige Plan
-
-Een paar suggesties:
-
-**Stats op LCD**: Misschien wissel tussen antwoord en stats met een delay
-```
-[0-3 sec]: "Hoi! Hoe gaat het?"
-[3-6 sec]: "😊95% 😴32%"  // Happiness & Fatigue
-```
 
 **Sonar Servo Pattern**: 
 ```cpp
@@ -518,7 +464,7 @@ readSonar();
 ## Team
 
 **VTI Brugge**  
-Vaartdijkstraat 3, Brugge, België
+Vaartdijkstraat 3, Brugge, Belgie
 
 ### Teamleden
 
@@ -566,3 +512,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 [![Dwengo](https://img.shields.io/badge/Powered%20by-Dwengo-orange)](https://www.dwengo.org/)
 
 </div>
+
