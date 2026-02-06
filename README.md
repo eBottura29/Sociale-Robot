@@ -76,18 +76,18 @@ Dit robotconcept kan ook ingezet worden voor:
 - Natuurlijke gesprekken via LLM (HuggingFace of alternatief)
 - Emotie-detectie en -verwerking van conversaties
 - Desktop applicatie voor tekstcommunicatie
-- Real-time communicatie via seriële verbinding (Arduino IDE Serial Monitor)
+- Real-time communicatie via seriële verbinding (PySerial)
 
 ### Emotionele Expressie
-- **4x LED Matrices** voor visuele emoties en stats:
+- **3x LED Matrices** voor visuele emoties:
   - **Happiness** (Geluk/Blijdschap)
   - **Fatigue** (Moeheid/Energie Level)
-  - **Hunger** (Honger/Behoefte aan interactie)
+  - **Hunger** (Honger)
   - **Sadness** (Verdriet/Eenzaamheid)
   - **Anxiety** (Ongerustheid/Stress)
   - **Affection** (Genegenheid/Verbondenheid)
   - **Curiosity** (Nieuwsgierigheid)
-  - **Frustration** (Frustratie bij obstakels)
+  - **Frustration** (Frustratie)
 
 - **LCD Scherm** (2x16 karakters = 32 totaal)
   - Toont robotantwoorden
@@ -150,7 +150,7 @@ Dit robotconcept kan ook ingezet worden voor:
 │            │                │                │            │
 │  ┌─────────▼──────┐  ┌──────▼──────┐  ┌──────▼──────┐     │
 │  │ Sonar Sensors  │  │ LED Matrices│  │   Servos    │     │
-│  │  (op servo)    │  │  (4x 8x8)   │  │ (2x Continu)│     │
+│  │  (op servo)    │  │  (3x 8x8)   │  │ (2x Continu)│     │
 │  └────────────────┘  └─────────────┘  └─────────────┘     │
 │                                                           │
 │  ┌────────────────┐  ┌─────────────┐  ┌─────────────┐     │
@@ -169,7 +169,7 @@ Dit robotconcept kan ook ingezet worden voor:
    - Stuurt commando's naar robot via serieel
 3. **Robot**: 
    - Ontvangt emotie-data en bewegingscommando's
-   - Update LED matrices (emoties/stats)
+   - Update LED matrices (emoties)
    - Toont antwoord op LCD
    - Sonar data → terug naar laptop
 4. **Laptop**: Verwerkt sonar data voor navigatiebeslissingen
@@ -179,11 +179,11 @@ Dit robotconcept kan ook ingezet worden voor:
 ## Hardware Componenten
 
 ### Microcontroller
-- **1x Dwenguino Board** - Hoofdbesturing
+- **1x Dwenguino Board (PIC18F4550)** - Hoofdbesturing
 
 ### Display & Visualisatie
-- **4x LED Matrix (8x8)** - Emoties en stats weergeven
-- **1x LCD Scherm (16x2)** - Tekst output (32 karakters totaal)
+- **3x LED Matrix (8x8) (1088AS)** - Emoties en weergeven
+- **1x LCD Scherm (16x2) (WH1602B)** - Tekst output (32 karakters totaal)
 - **1x RGB LED** - Debugging/visuele effecten
 
 ### Sensoren
@@ -198,10 +198,10 @@ Dit robotconcept kan ook ingezet worden voor:
 - **1x Buzzer** - R2D2-achtige geluiden
 
 ### Communicatie
-- **USB Kabel** - Seriële verbinding met laptop
+- **USB Kabel (USB-A --> MICRO USB)** - Seriële verbinding met laptop
 
 ### Voeding
-- **USB Kabel** - Zelfde verbinding met laptop
+- **USB Kabel (USB-A --> MICRO USB)** - Diezelfde verbinding met laptop
 
 ---
 
@@ -212,9 +212,8 @@ Dit robotconcept kan ook ingezet worden voor:
 #### 1. Desktop Applicatie
 ```
 Desktop App Features:
-├── GUI Interface (tkinter/PyQt)
+├── GUI Interface (tkinter)
 │   ├── Tekstinvoer venster
-│   ├── Conversatie geschiedenis
 │   └── Emotie/stats visualisatie
 ├── LLM Integratie
 │   ├── HuggingFace API verbinding
@@ -254,7 +253,7 @@ else:
     search_for_object()
 ```
 
-### Robot Software (Arduino/C++)
+### Robot Software (C++)
 
 #### Firmware Structuur
 ```cpp
@@ -270,13 +269,8 @@ else:
 │   ├── Update emotie displays
 │   ├── Control beweging
 │   ├── Lees sonar data
-│   └── Stuur data terug
-└── Helper functies
-    ├── displayEmotion()
-    ├── updateLCD()
-    ├── moveRobot()
-    ├── playSoundEffect()
-    └── scanSonars()
+└── └── Stuur data terug
+
 ```
 
 #### Emotie Patterns voor LED Matrices
@@ -305,9 +299,8 @@ Frustration:  😡 (Angry face)
 - Laptop met USB poort
 
 **Software:**
-- Arduino IDE (1.8.x of 2.x)
 - Python 3.8+
-- Dwenguino bibliotheek voor Arduino
+- Git
 
 ### Laptop Setup
 
@@ -322,22 +315,18 @@ pip install -r requirements.txt
 
 **requirements.txt:**
 ```
-transformers>=4.30.0
-torch>=2.0.0
 pyserial>=3.5
-sentencepiece>=0.1.99
-tkinter  # Of PyQt5
-numpy>=1.24.0
+tkinter
 ```
 
 ### Robot Setup
 
-1. Open Arduino IDE
-2. Installeer Dwenguino board package
-3. Open `src/robot/main/main.ino`
-4. Selecteer **Tools > Board > Dwenguino**
-5. Selecteer juiste COM poort
-6. Upload code naar Dwenguino
+1. Open `https://blockly.dwengo.org/`
+2. Importeer code van `src/robot/main/main.cpp`
+3. Druk op de RESET knop en dan op de S knop (dwenguino bord)
+4. Laat bijde knoppen los
+5. Klik op de "play" knop in de website
+6. Als de programma gedownload is, kopieer die naar de USB van de DWENGUINO
 
 ---
 
@@ -367,7 +356,7 @@ python main.py
 - Robot navigeert autonoom in ruimte
 
 ### 5. Monitoring
-- **Serial Monitor** (Arduino IDE): Bekijk debug info
+- **Serial Monitor** (op blockly.dwengo.org): Bekijk debug info
 - **Desktop App**: Zie conversatie en emotie scores
 - **RGB LED**: Toont systeem status
 
@@ -536,7 +525,7 @@ Vaartdijkstraat 3, Brugge, België
 | Naam | Rol | Email | Discord |
 |------|-----|-------|---------|
 | **Enrico Stefanuto Bottura** | Hoofd Programmeur, Planner/Organiser, Elektrische Schakeling | enrico.stefanutobott@vtibrugge.be | @eBottura |
-| **Sam de Waele** | 2e Programmeur, Hoofd Elektrische Schakeling,Onderzoeker van regelementen | sam.dewaele@vtibrugge.be | @de_crusader |
+| **Sam de Waele** | 2e Programmeur, Hoofd Elektrische Schakeling, Onderzoeker van regelementen | sam.dewaele@vtibrugge.be | @de_crusader |
 | **Yesse Dirk Paul Jozef Geeraert** | Design Helper, Wiel Designer, Emotionele Support | yesse.geeraert@vtibrugge.be | @sylq. |
 | **Razvan Marian Aioanei** | Hoofd Designer, Graphical Designer, Hoofd Romeens | razvan.marianaioanei@vtibrugge.be | @boiiiiiiiiiiiiiiiiiiiiiiiiii |
 
@@ -568,7 +557,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **HuggingFace** - Voor gratis toegang tot LLM modellen
 - **VTI Brugge** - Voor de ondersteuning en apparatuur
 - **ChatGPT & Google Gemini** - Algemene hulp
-- **Claude** - Dit README.md
+- **Claude** - Dit README.md bestand
 
 ---
 
