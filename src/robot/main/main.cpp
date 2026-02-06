@@ -18,9 +18,9 @@ int sonar1;
 int sonar2;
 int closest;
 
-Servo servo1;  // pin 40
-Servo servo2;  // pin 41
-Servo servo3;  // pin 19
+Servo servo1;  // pin 40: cont. servo
+Servo servo2;  // pin 41: cont. servo
+Servo servo3;  // pin 19: 180° servo
 
 void updateLCD(String str) {
   dwenguinoLCD.clear();
