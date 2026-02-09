@@ -73,7 +73,8 @@ Dit robotconcept kan ook ingezet worden voor:
 ## Kenmerken
 
 ### Conversatie & AI
-- Natuurlijke gesprekken via LLM (HuggingFace, lokaal)
+- Natuurlijke gesprekken via LLM (HuggingFace, lokaal, Engels)
+- NL -> EN vertaling voor de LLM en EN -> NL vertaling na de LLM (mBART)
 - Emotie-detectie en -verwerking van conversaties (nlptown/bert-base-multilingual-uncased-sentiment)
 - Desktop applicatie voor tekstcommunicatie
 - Real-time communicatie via seriele verbinding (PySerial)
@@ -177,7 +178,7 @@ Desktop App Features:
 ```
 
 #### 2. LLM Opties (Gratis)
-**Actuele implementatie:** GroNLP/gpt2-small-dutch (lokaal)
+**Actuele implementatie:** openai-community/gpt2-large (Engels, lokaal) + facebook/mbart-large-50-many-to-many-mmt (vertaling NL <-> EN)
 Mogelijke gratis LLM's via HuggingFace:
 - **GPT-2** - Lichtgewicht, snel
 - **BLOOM** - Meertalig (Nederlands!)
