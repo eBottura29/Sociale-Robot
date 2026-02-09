@@ -1,6 +1,0 @@
-transformers>=4.30.0
-torch>=2.0.0
-pyserial>=3.5
-sentencepiece>=0.1.99
-tkinter
-numpy>=1.24.0
