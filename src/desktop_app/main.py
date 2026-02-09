@@ -1,10 +1,5 @@
-import serial
-import tkinter as tk
-
-
-def main():
-    pass
+﻿from app import run_app
 
 
 if __name__ == "__main__":
-    main()
+    run_app()
