@@ -1,5 +1,7 @@
 import random
 import threading
+import os
+from pathlib import Path
 
 from config import (
     LLM_MODEL_NAME,
@@ -73,15 +75,17 @@ class LlmEngine:
             return
         try:
             local_only = not LLM_ALLOW_DOWNLOAD
-            tokenizer = AutoTokenizer.from_pretrained(LLM_MODEL_NAME, local_files_only=local_only)
-            model = AutoModelForCausalLM.from_pretrained(LLM_MODEL_NAME, local_files_only=local_only)
+            token = self._load_hf_token()
+            kwargs = {"local_files_only": local_only}
+            if token:
+                kwargs["token"] = token
+            tokenizer = AutoTokenizer.from_pretrained(LLM_MODEL_NAME, **kwargs)
+            model = AutoModelForCausalLM.from_pretrained(LLM_MODEL_NAME, **kwargs)
             self.generator = pipeline("text-generation", model=model, tokenizer=tokenizer, device=-1)
-            self.sentiment = pipeline(
-                "sentiment-analysis",
-                model=SENTIMENT_MODEL_NAME,
-                device=-1,
-                local_files_only=local_only,
-            )
+            sent_kwargs = {"model": SENTIMENT_MODEL_NAME, "device": -1, "local_files_only": local_only}
+            if token:
+                sent_kwargs["token"] = token
+            self.sentiment = pipeline("sentiment-analysis", **sent_kwargs)
             self.models_ready = True
         except Exception as exc:
             if not LLM_ALLOW_DOWNLOAD:
@@ -89,6 +93,20 @@ class LlmEngine:
             else:
                 self.model_error = f"Model laden faalde: {exc}"
             self._debug(self.model_error)
+    
+    def _load_hf_token(self) -> str:
+        env_token = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN")
+        if env_token:
+            return env_token.strip()
+        try:
+            base_dir = Path(__file__).resolve().parents[2]
+            token_path = base_dir / ".hf_token"
+            if token_path.exists():
+                token = token_path.read_text(encoding="utf-8").strip()
+                return token
+        except Exception:
+            return ""
+        return ""
 
     def _fallback_response(self, message: str) -> str:
         lowered = message.lower()
