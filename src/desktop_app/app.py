@@ -26,6 +26,7 @@ class NierDesktopApp:
         self.debug_vars = {}
         self.debug_enabled = tk.BooleanVar(value=False)
         self.recent_messages = deque(maxlen=3)
+        self.conversation_history = []
         self.lcd_scroll_after_id = None
         self.lcd_scroll_index = 0
         self.lcd_scroll_text = ""
@@ -105,17 +106,18 @@ class NierDesktopApp:
             command=self._toggle_debug_panel,
         ).grid(row=1, column=0, sticky="w", pady=(6, 0))
 
-        response_frame = ttk.Labelframe(chat_frame, text="Antwoord (PC)", style="Section.TLabelframe")
-        response_frame.grid(row=1, column=0, sticky="ew")
-        response_frame.columnconfigure(0, weight=1)
+        self.response_frame = ttk.Labelframe(chat_frame, text="Antwoord (PC)", style="Section.TLabelframe")
+        self.response_frame.grid(row=1, column=0, sticky="ew")
+        self.response_frame.columnconfigure(0, weight=1)
         self.response_label = ttk.Label(
-            response_frame,
+            self.response_frame,
             text="...",
             font=("Segoe UI", 11),
             wraplength=520,
             justify="left",
         )
         self.response_label.grid(row=0, column=0, sticky="w", pady=(4, 4))
+        self.response_frame.grid_remove()
 
         input_frame = ttk.Frame(chat_frame)
         input_frame.grid(row=2, column=0, sticky="ew", pady=(12, 0))
@@ -177,6 +179,13 @@ class NierDesktopApp:
 
         self.connection_status = ttk.Label(connection, text="Status: Offline")
         self.connection_status.grid(row=1, column=1, columnspan=2, sticky="w", padx=(8, 0), pady=(8, 0))
+
+        self.reset_button = ttk.Button(connection, text="Reset", command=self._send_reset, state="disabled")
+        self.reset_button.grid(row=2, column=0, pady=(6, 0), sticky="w")
+        self.reset_label = ttk.Label(connection, text="Soft reset (staat blijft bewaard)")
+        self.reset_label.grid(row=2, column=1, columnspan=2, sticky="w", padx=(8, 0), pady=(6, 0))
+        self.reset_button.grid_remove()
+        self.reset_label.grid_remove()
 
         emotions_frame = ttk.Labelframe(status_frame, text="Emotie statistieken", style="Section.TLabelframe")
         emotions_frame.grid(row=1, column=0, sticky="ew", pady=(0, 12))
@@ -244,7 +253,8 @@ class NierDesktopApp:
         try:
             response = self._handle_basic_intent(message)
             if response is None:
-                response = self.llm.generate_response(message)
+                history = list(self.conversation_history)
+                response = self.llm.generate_response(message, history=history, emotions=self.emotion_values)
             temp_history = list(self.recent_messages)
             temp_history.append(f"Gebruiker: {message}")
             temp_history.append(f"Robot: {response}")
@@ -268,6 +278,8 @@ class NierDesktopApp:
 
         self.recent_messages.append(f"Gebruiker: {message}")
         self.recent_messages.append(f"Robot: {response}")
+        self.conversation_history.append(f"Gebruiker: {message}")
+        self.conversation_history.append(f"Robot: {response}")
 
         for name, value in emotions.items():
             self._set_emotion(name, value)
@@ -375,6 +387,7 @@ class NierDesktopApp:
         self.connect_button.configure(text="Verbreken")
         self.connection_status.configure(text=f"Status: Verbonden ({port})")
         self.logger.log("CONNECT_OK", f"Verbonden met {port}")
+        self.reset_button.configure(state="normal")
 
         self._reset_stats()
         self._send_line("HELLO")
@@ -385,6 +398,7 @@ class NierDesktopApp:
         self.connect_button.configure(text="Verbinden")
         self.connection_status.configure(text="Status: Offline")
         self.logger.log("DISCONNECT", "Verbinding verbroken")
+        self.reset_button.configure(state="disabled")
         self._safe_stop()
 
 
@@ -395,6 +409,13 @@ class NierDesktopApp:
 
     def _send_line(self, line: str) -> None:
         self.serial.send_line(line)
+
+    def _send_reset(self) -> None:
+        if not self.connected or not self.serial.serial_port:
+            self._set_debug("Laatste TX", "RESET (niet verbonden)")
+            return
+        self._send_line("RESET")
+        self._set_telemetry("Laatste Commando", "RESET")
 
 
     def _poll_serial(self) -> None:
@@ -497,9 +518,15 @@ class NierDesktopApp:
         if self.debug_enabled.get():
             self.debug_frame.grid()
             self.lcd_frame.grid()
+            self.response_frame.grid()
+            self.reset_button.grid()
+            self.reset_label.grid()
         else:
             self.debug_frame.grid_remove()
             self.lcd_frame.grid_remove()
+            self.response_frame.grid_remove()
+            self.reset_button.grid_remove()
+            self.reset_label.grid_remove()
 
 
     def _safe_int(self, value: str) -> int:

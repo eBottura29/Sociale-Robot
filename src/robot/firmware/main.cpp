@@ -36,6 +36,7 @@ static inline void compatSetRGBLed(int r, int g, int b) {
 // - HELLO
 // - PING
 // - STOP
+// - RESET                              software reset (state reset)
 // - MOVE:<left>,<right>                 left/right = -255..255
 // - LCD:<text>                          tekst op LCD
 // - EMO:<h>,<fat>,<hun>,<sad>,<anx>,<aff>,<cur>,<fru>   0..100
@@ -44,6 +45,7 @@ static inline void compatSetRGBLed(int r, int g, int b) {
 // - READY
 // - PONG
 // - ACK:<command>
+// - ACK:RESET
 // - STAT:<sonarL>,<sonarR>,<closest>,<battery>,<mode>
 // - OUT:<r>,<g>,<b>,<buzzer>,<matrix>,<lcd>
 // - EMO:<h>,<fat>,<hun>,<sad>,<anx>,<aff>,<cur>,<fru>
@@ -183,6 +185,28 @@ void setMatrixPattern(const byte pattern[8]) {
   }
 }
 
+void softResetState() {
+  cmdLeft = 0;
+  cmdRight = 0;
+  cmdActive = false;
+  lastCmdMs = millis();
+  lastTelemetryMs = 0;
+  inputPos = 0;
+  currentRgb[0] = 0;
+  currentRgb[1] = 0;
+  currentRgb[2] = 0;
+  currentBuzzerOn = false;
+  currentMatrixIndex = 0;
+  for (int i = 0; i < EMO_COUNT; i++) {
+    currentEmo[i] = 0;
+  }
+  stopRobot();
+  noTone(BUZZER);
+  updateLCD(" ");
+  compatClearLedMatrix();
+  applyEmotionOutputs();
+}
+
 void applyEmotionOutputs() {
   int maxIndex = 0;
   int maxValue = currentEmo[0];
@@ -274,6 +298,11 @@ void handleLine(String line) {
     cmdActive = false;
     stopRobot();
     Serial.println(F("ACK:STOP"));
+    return;
+  }
+  if (line == "RESET") {
+    softResetState();
+    Serial.println(F("ACK:RESET"));
     return;
   }
   if (line.startsWith("MOVE:")) {
