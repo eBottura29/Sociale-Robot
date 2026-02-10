@@ -1,47 +1,280 @@
-# Dwengo / Dwenguino – **VOLLEDIGE** C++ / Arduino (.ino) documentatie
+# NIER Robot - Complete Build and Run Guide
 
-> Dit document is bedoeld als **DE ENIGE documentatie** die je nodig hebt om de Dwenguino te programmeren.
->
-> Aannames:
->
-> * Je kent **C++ of Arduino** (variabelen, if, loops, functies, arrays)
-> * Je kent **Dwengo/Dwenguino nog NIET**
->
-> Na het lezen van dit document moet je:
->
-> * Elke Dwengo-component kunnen gebruiken
-> * Bestaande Dwengo-code kunnen lezen
-> * Zelf volledige projecten kunnen bouwen
+This document is the single source of truth for building the robot, flashing firmware, running the desktop app, and understanding the protocol.
+It is written to be enough to reproduce the full project without other files.
 
 ---
 
-# 1. Wat is de Dwenguino?
+## 1. Repository Layout
 
-De **Dwenguino** is een **Arduino-compatibel** microcontrollerbord met:
+Use these paths as your reference when reading or modifying the project.
 
-* ATmega microcontroller (zoals Arduino Uno)
-* Ingebouwde hardware:
-
-  * LCD-scherm (16x2)
-  * 5 knoppen
-  * Buzzer
-  * 8 LEDs
-  * 8x8 LED-matrix
-  * RGB LED
-* Aansluitingen voor:
-
-  * Servo’s
-  * 360° servo’s
-  * Sonar sensor
-  * Analoge en digitale sensoren
-
-Je programmeert de Dwenguino met een **.ino** bestand in de Arduino IDE.
+- `src/desktop_app/` Python desktop app (GUI, LLM, emotions, serial, navigation).
+- `src/robot/firmware/main.cpp` Robot firmware for Dwenguino.
+- `src/robot/docs/documentation.md` This document.
+- `requirements.txt` Python dependencies.
+- `.hf_token` Hugging Face token (not committed).
+- `logs/` Per-session logs (created at runtime).
 
 ---
 
-# 2. Verplichte structuur van ELK Dwengo-programma
+## 2. Hardware Requirements
 
-Elke Dwengo-code bestaat uit:
+Minimum hardware used by this project.
+
+- Dwenguino board (PIC18F4550 platform).
+- 2x ultrasonic sonar sensors (HC-SR04 compatible).
+- 2x 360 degree continuous rotation servos (drive).
+- 1x 180 degree servo (sensor mount or eyebrows).
+- LCD 16x2 display (on-board).
+- 8x8 LED matrix (on-board).
+- RGB LED (on-board).
+- Buzzer (on-board).
+- USB cable for serial and power.
+- Power for motors if required (external if USB not enough).
+
+---
+
+## 3. Wiring and Pin Map
+
+The firmware defines the pins used by the robot. Wire your hardware to match the firmware.
+
+### 3.1 Sonar sensors (HC-SR04)
+
+- Sonar 1 trigger: `A1`
+- Sonar 1 echo: `A0`
+- Sonar 2 trigger: `A3`
+- Sonar 2 echo: `A2`
+
+### 3.2 Servos
+
+- Servo 1: pin `40`
+- Servo 2: pin `41`
+- Servo 3: pin `19`
+- Servo 4: pin `18`
+- Servo 5: pin `17`
+- Servo 6: pin `16`
+
+### 3.3 Built-in peripherals
+
+These are on-board and do not need wiring.
+
+- LCD 16x2
+- LED matrix 8x8
+- RGB LED
+- Buzzer
+- Buttons (SW_N, SW_E, SW_S, SW_W, SW_C)
+
+---
+
+## 4. Firmware Setup (Robot)
+
+The firmware is in `src/robot/firmware/main.cpp`.
+
+### 4.1 Flashing with Blockly (Dwengo)
+
+1. Open `https://blockly.dwengo.org/`.
+2. Import `src/robot/firmware/main.cpp`.
+3. Press the RESET button and then the S button on the Dwenguino.
+4. Release both buttons.
+5. Click the "play" button in the website to flash.
+
+### 4.2 Firmware behavior summary
+
+- Listens to serial commands (see protocol below).
+- Sends telemetry at a fixed interval.
+- Updates LCD, LED matrix, RGB, and buzzer based on commands.
+- Performs a soft reset when `RESET` is received.
+
+---
+
+## 5. Desktop App Setup (Python)
+
+The desktop app runs the UI, LLM, emotions, logging, and navigation.
+
+### 5.1 Install dependencies
+
+From the repo root:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+### 5.2 Run the app
+
+```bash
+python src/desktop_app/main.py
+```
+
+### 5.3 Connect to the robot
+
+- Select the correct COM port.
+- Click "Verbinden".
+
+### 5.4 Debug features
+
+Enable "Debug info tonen" to show these panels and fields.
+
+- Antwoord (PC)
+- LCD preview
+- RX/TX debug
+- Extra telemetry
+
+### 5.5 Reset behavior
+
+The Reset button always works:
+
+- If offline: resets local state (UI, history, emotions).
+- If online: resets local state and sends `RESET` to the robot.
+
+---
+
+## 6. LLM Setup (Hugging Face)
+
+The desktop app uses a local Hugging Face model. The default is:
+
+- `meta-llama/Llama-3.2-3B-Instruct`
+
+### 6.1 Gated model access
+
+The Llama models are gated. You must request access and authenticate.
+
+1. Go to the model page and request access.
+2. Put your HF token in `.hf_token` in the repo root.
+3. Make sure `LLM_ALLOW_DOWNLOAD = True` in `src/desktop_app/config.py`.
+
+`.hf_token` format:
+
+```
+hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+### 6.2 Change model
+
+Edit `src/desktop_app/config.py`:
+
+```python
+LLM_MODEL_NAME = "meta-llama/Llama-3.2-3B-Instruct"
+```
+
+You can change to any Hugging Face model ID you have access to.
+
+### 6.3 Length control
+
+These values control response length:
+
+- `LLM_MAX_NEW_TOKENS`
+- `LLM_MIN_NEW_TOKENS`
+
+Shorter responses: lower max, keep min small.
+
+---
+
+## 7. Serial Protocol (PC <-> Robot)
+
+All commands are ASCII lines ending with `\n`.
+
+### 7.1 PC -> Robot
+
+- `HELLO`
+- `PING`
+- `STOP`
+- `RESET`
+- `MOVE:<left>,<right>` where each is `-255..255`
+- `LCD:<text>` max about 128 chars (truncated)
+- `EMO:<h>,<fat>,<hun>,<sad>,<anx>,<aff>,<cur>,<fru>` each 0..100
+
+### 7.2 Robot -> PC
+
+- `READY`
+- `PONG`
+- `ACK:<command>`
+- `ACK:RESET`
+- `STAT:<sonarL>,<sonarR>,<closest>,<battery>,<mode>`
+- `OUT:<r>,<g>,<b>,<buzzer>,<matrix>,<lcd>`
+- `EMO:<h>,<fat>,<hun>,<sad>,<anx>,<aff>,<cur>,<fru>`
+
+---
+
+## 8. Navigation Logic (Desktop App)
+
+The navigation is computed on the PC using sonar readings from the robot.
+
+- If closest distance <= 20 cm: avoid by turning away.
+- If closest distance <= 60 cm: approach with a small correction.
+- Otherwise: search mode (random forward/turn).
+
+The PC sends `MOVE` commands to the robot with low speed values.
+
+---
+
+## 9. Emotions System
+
+The desktop app computes emotions based on:
+
+- Recent conversation context
+- Sentiment score
+
+Outputs:
+
+- 8 emotion percentages (0..100)
+- Dominant emotion used for LED matrix and RGB
+
+---
+
+## 10. Logging
+
+Each session creates a log file in `logs/`:
+
+- `session_YYYYMMDD_HHMMSS.log`
+
+Log categories:
+
+- `APP_START`, `APP_STOP`
+- `USER_MSG`, `ROBOT_MSG`
+- `TX`, `RX`
+- `CONNECT_OK`, `CONNECT_FAIL`, `DISCONNECT`
+- `SERIAL_ERR`
+- `RESET`
+- `LLM` and error details
+
+---
+
+## 11. Troubleshooting
+
+### 11.1 No serial connection
+
+- Check COM port.
+- Make sure no other app is using the port.
+- Verify the USB cable supports data, not just power.
+
+### 11.2 LLM says offline or gated
+
+- Make sure you have access to the model on Hugging Face.
+- Add a valid token to `.hf_token`.
+- Set `LLM_ALLOW_DOWNLOAD = True`.
+
+### 11.3 Very slow responses
+
+- The model may be too large for CPU-only.
+- Use a smaller model (1B) or reduce `LLM_MAX_NEW_TOKENS`.
+
+### 11.4 LCD is blank
+
+- Check firmware flashed correctly.
+- Make sure the LCD is initialized by `initDwenguino()`.
+
+---
+
+## 12. Safety Notes
+
+- Use low speed values for `MOVE` on a desk.
+- Avoid running motors without enough power.
+- Keep sonar sensors unobstructed.
+
+---
+
+## 13. Minimal Firmware Template
 
 ```cpp
 #include <Dwenguino.h>
@@ -54,244 +287,6 @@ void loop() {
 }
 ```
 
-## 2.1 `initDwenguino()` (EXTREEM BELANGRIJK)
-
-Deze functie:
-
-* Initialiseert het LCD-scherm
-* Initialiseert de knoppen
-* Initialiseert de LEDs
-* Initialiseert de LED-matrix
-* Initialiseert de buzzer
-
-❗ **Zonder `initDwenguino()` werkt Dwengo NIET correct**
-
 ---
 
-# 3. Alle mogelijke `#include` libraries (Dwengo)
-
-## 3.1 Altijd of bijna altijd nodig
-
-```cpp
-#include <Dwenguino.h>      // Kern van het bord
-#include <Wire.h>           // I2C communicatie (intern gebruikt)
-#include <LiquidCrystal.h>  // LCD scherm
-```
-
-⚠️ `Dwenguino.h` is **de belangrijkste** library
-
----
-
-## 3.2 Servo library
-
-```cpp
-#include <Servo.h>
-```
-
-Nodig voor:
-
-* 180° servo
-* 360° servo
-
----
-
-## 3.3 Arduino standaard libraries (soms nodig)
-
-```cpp
-#include <Arduino.h>   // impliciet, meestal niet nodig om zelf te includen
-#include <Math.h>
-```
-
----
-
-# 4. Pin-definities op de Dwenguino
-
-## 4.1 Digitale en analoge pinnen
-
-Zoals Arduino:
-
-```cpp
-A0 A1 A2 A3 A4 A5
-0  1  2  3  4  5
-```
-
----
-
-## 4.2 Knoppen (ingebouwd)
-
-```cpp
-SW_N   // Noord
-SW_E   // Oost
-SW_S   // Zuid
-SW_W   // West
-SW_C   // Center
-```
-
-### Gebruik (VERPLICHT):
-
-```cpp
-pinMode(SW_S, INPUT_PULLUP);
-```
-
-### Logica:
-
-| Waarde | Betekenis           |
-| ------ | ------------------- |
-| 0      | knop ingedrukt      |
-| 1      | knop niet ingedrukt |
-
----
-
-# 5. LCD-scherm (16x2)
-
-Object:
-
-```cpp
-extern LiquidCrystal dwenguinoLCD;
-```
-
-### Functies
-
-```cpp
-dwenguinoLCD.clear();
-dwenguinoLCD.setCursor(kolom, rij);
-dwenguinoLCD.print("tekst");
-```
-
-* `kolom`: 0–15
-* `rij`: 0 of 1
-
----
-
-# 6. LEDs (8 stuks)
-
-```cpp
-setLed(ledNummer, HIGH);
-setLed(ledNummer, LOW);
-```
-
-* `ledNummer`: 0–7
-
----
-
-# 7. RGB LED
-
-```cpp
-setRGBLed(rood, groen, blauw);
-```
-
-* Waarden: 0–255
-
----
-
-# 8. Buzzer
-
-```cpp
-tone(BUZZER, frequentie);
-noTone(BUZZER);
-```
-
-Frequentie in Hz.
-
----
-
-# 9. LED Matrix (8x8)
-
-```cpp
-setLedMatrixPixel(x, y, true);
-setLedMatrixPixel(x, y, false);
-```
-
-* x: 0–7
-* y: 0–7
-
-```cpp
-clearLedMatrix();
-```
-
----
-
-# 10. Servo (180°)
-
-```cpp
-Servo servo;
-servo.attach(SERVO_1);
-servo.write(hoek);
-```
-
-* `hoek`: 0–180
-
----
-
-# 11. 360° Servo
-
-```cpp
-servo.write(90);   // stop
-servo.write(0);    // max links
-servo.write(180);  // max rechts
-```
-
----
-
-# 12. Sonar sensor
-
-```cpp
-long afstand = getSonarDistance();
-```
-
-* Eenheid: cm
-
----
-
-# 13. Geluidssensor
-
-```cpp
-pinMode(A4, INPUT);
-int geluid = digitalRead(A4);
-```
-
----
-
-# 14. Tijd & timing
-
-```cpp
-delay(ms);
-millis();
-```
-
----
-
-# 15. Arrays & buffers (essentieel voor data)
-
-```cpp
-int buffer[64];
-```
-
----
-
-# 16. Typische Dwengo-specifieke regels
-
-* `initDwenguino()` altijd eerst
-* Knoppen zijn **actief LOW**
-* LCD heeft maar 2 lijnen
-* Servo’s gebruiken vaste poorten
-* LED matrix coördinaten beginnen bij 0
-
----
-
-# 17. Absolute minimum template
-
-```cpp
-#include <Dwenguino.h>
-
-void setup() {
-  initDwenguino();
-}
-
-void loop() {
-}
-```
-
----
-
-Deze documentatie is geschreven door ChatGPT!
+End of document.
