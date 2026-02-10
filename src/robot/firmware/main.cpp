@@ -70,7 +70,8 @@ const char *EMO_NAMES[EMO_COUNT] = {
   "FRUSTRATION"
 };
 
-const int INPUT_BUFFER_SIZE = 160;
+const int INPUT_BUFFER_SIZE = 192;
+const int LCD_TEXT_MAX = 128;
 char inputBuffer[INPUT_BUFFER_SIZE];
 int inputPos = 0;
 
@@ -84,7 +85,7 @@ int currentEmo[EMO_COUNT] = {0};
 int currentRgb[3] = {0, 0, 0};
 bool currentBuzzerOn = false;
 int currentMatrixIndex = 0;
-char currentLcdText[33] = " ";
+char currentLcdText[LCD_TEXT_MAX + 1] = " ";
 unsigned long lastLcdScrollMs = 0;
 int lcdScrollIndex = 0;
 int lcdScrollLength = 0;
@@ -121,7 +122,10 @@ void updateLCD(String str) {
   if (trimmed.length() < 1) {
     trimmed = " ";
   }
-  trimmed.toCharArray(currentLcdText, 33);
+  if (trimmed.length() > LCD_TEXT_MAX) {
+    trimmed = trimmed.substring(0, LCD_TEXT_MAX);
+  }
+  trimmed.toCharArray(currentLcdText, LCD_TEXT_MAX + 1);
   lcdScrollIndex = 0;
   lcdScrollLength = trimmed.length();
   lastLcdScrollMs = millis();
@@ -371,7 +375,7 @@ void loop() {
     sendTelemetry();
   }
 
-  if (lcdScrollLength > 16 && millis() - lastLcdScrollMs >= LCD_SCROLL_INTERVAL_MS) {
+  if (lcdScrollLength > 32 && millis() - lastLcdScrollMs >= LCD_SCROLL_INTERVAL_MS) {
     lastLcdScrollMs = millis();
     lcdScrollIndex++;
     if (lcdScrollIndex >= lcdScrollLength) {
