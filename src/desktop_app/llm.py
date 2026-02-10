@@ -1,7 +1,14 @@
 import random
 import threading
 
-from config import LLM_MODEL_NAME, SENTIMENT_MODEL_NAME
+from config import (
+    LLM_MODEL_NAME,
+    SENTIMENT_MODEL_NAME,
+    LLM_ALLOW_DOWNLOAD,
+    LLM_MAX_NEW_TOKENS,
+    LLM_TEMPERATURE,
+    LLM_TOP_P,
+)
 
 
 class LlmEngine:
@@ -10,6 +17,7 @@ class LlmEngine:
         self.sentiment = None
         self.models_ready = False
         self.model_error = ""
+        self.last_fallback = ""
         self.model_lock = threading.Lock()
         self.debug_cb = debug_cb
 
@@ -27,10 +35,10 @@ class LlmEngine:
             with self.model_lock:
                 output = self.generator(
                     prompt,
-                    max_new_tokens=60,
+                    max_new_tokens=LLM_MAX_NEW_TOKENS,
                     do_sample=True,
-                    temperature=0.7,
-                    top_p=0.9,
+                    temperature=LLM_TEMPERATURE,
+                    top_p=LLM_TOP_P,
                 )
             generated = output[0]["generated_text"]
             reply = generated[len(prompt):].strip()
@@ -64,44 +72,85 @@ class LlmEngine:
             self._debug(self.model_error)
             return
         try:
-            tokenizer = AutoTokenizer.from_pretrained(LLM_MODEL_NAME)
-            model = AutoModelForCausalLM.from_pretrained(LLM_MODEL_NAME)
+            local_only = not LLM_ALLOW_DOWNLOAD
+            tokenizer = AutoTokenizer.from_pretrained(LLM_MODEL_NAME, local_files_only=local_only)
+            model = AutoModelForCausalLM.from_pretrained(LLM_MODEL_NAME, local_files_only=local_only)
             self.generator = pipeline("text-generation", model=model, tokenizer=tokenizer, device=-1)
-            self.sentiment = pipeline("sentiment-analysis", model=SENTIMENT_MODEL_NAME, device=-1)
+            self.sentiment = pipeline(
+                "sentiment-analysis",
+                model=SENTIMENT_MODEL_NAME,
+                device=-1,
+                local_files_only=local_only,
+            )
             self.models_ready = True
         except Exception as exc:
-            self.model_error = f"Model laden faalde: {exc}"
+            if not LLM_ALLOW_DOWNLOAD:
+                self.model_error = "LLM niet beschikbaar (offline of model niet lokaal)."
+            else:
+                self.model_error = f"Model laden faalde: {exc}"
             self._debug(self.model_error)
 
     def _fallback_response(self, message: str) -> str:
         lowered = message.lower()
-        rng = random.Random()
-        rng.seed(lowered)
-
         greetings = [
             "Hoi! Ik ben NIER. Hoe voel je je vandaag?",
             "Hallo! Fijn je te zien. Hoe gaat het met je?",
             "Hey! Ik ben NIER. Waar kan ik je mee helpen?",
             "Hoi daar! Wil je vertellen hoe je je voelt?",
+            "Leuk dat je er bent. Wat houdt je bezig?",
+            "Welkom terug. Waar wil je over praten?",
         ]
         empathy = [
             "Dat klinkt moeilijk. Ik ben hier om te luisteren.",
             "Dat is niet makkelijk. Wil je er wat meer over vertellen?",
             "Ik hoor je. Wat speelt er op dit moment?",
             "Dank je dat je dit deelt. Wat heb je nu nodig?",
+            "Dat kan zwaar zijn. Zal ik gewoon luisteren of wil je advies?",
+            "Ik kan me voorstellen dat dat lastig voelt. Vertel gerust verder.",
         ]
-        prompts = [
+        questions = [
             "Ik luister. Vertel me meer.",
             "Ik ben benieuwd. Kun je dat uitleggen?",
             "Wat bedoel je precies? Ik luister.",
             "Wil je een voorbeeld geven?",
+            "Hoe begon dit?",
+            "Wat is voor jou het belangrijkste hieraan?",
+            "Wat hoop je dat er verandert?",
+        ]
+        thanks = [
+            "Graag gedaan! Wil je nog iets vragen?",
+            "Geen probleem. Ik ben er voor je.",
+            "Fijn dat ik kon helpen. Waar wil je nu verder over praten?",
+        ]
+        checks = [
+            "Oké. Hoe voel je je daarbij?",
+            "Ik snap het. Wat wil je nu doen?",
+            "Dat is duidelijk. Wil je dat ik meedenk of gewoon luister?",
         ]
 
+        if any(word in lowered for word in ["dank", "merci", "bedankt", "thx"]):
+            return self._pick(thanks)
         if any(word in lowered for word in ["hoi", "hey", "hallo", "goedemorgen", "goeiemorgen", "goeiedag", "goedenavond"]):
-            return rng.choice(greetings)
-        if any(word in lowered for word in ["eenzaam", "verdrietig", "somber", "bang", "gestrest", "moe", "pijn"]):
-            return rng.choice(empathy)
-        return rng.choice(prompts)
+            return self._pick(greetings)
+        if any(word in lowered for word in ["eenzaam", "verdrietig", "somber", "bang", "gestrest", "moe", "pijn", "angst", "stress"]):
+            return self._pick(empathy)
+        if any(word in lowered for word in ["ja", "ok", "goed", "prima", "gaat", "fijn", "meh"]):
+            return self._pick(checks)
+        return self._pick(questions)
+
+    def _pick(self, options: list) -> str:
+        if not options:
+            return ""
+        if len(options) == 1:
+            self.last_fallback = options[0]
+            return options[0]
+        candidate = random.choice(options)
+        if candidate == self.last_fallback:
+            alt = [opt for opt in options if opt != self.last_fallback]
+            if alt:
+                candidate = random.choice(alt)
+        self.last_fallback = candidate
+        return candidate
 
     def _debug(self, message: str) -> None:
         if self.debug_cb:

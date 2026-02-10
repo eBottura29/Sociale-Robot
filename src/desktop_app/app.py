@@ -1,6 +1,7 @@
-﻿import threading
+import threading
 from datetime import datetime
 from collections import deque
+from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
 
@@ -29,14 +30,18 @@ class NierDesktopApp:
         self.lcd_scroll_index = 0
         self.lcd_scroll_text = ""
 
-        self.serial = SerialManager(debug_cb=lambda msg: self._set_debug("Laatste TX", msg))
-        self.llm = LlmEngine(debug_cb=lambda msg: self.root.after(0, lambda: self._set_debug("Laatste RX", msg)))
+        self.logger = AppLogger()
+        self.logger.log("APP_START", "Desktop app gestart")
+
+        self.serial = SerialManager(debug_cb=self._on_serial_tx_debug)
+        self.llm = LlmEngine(debug_cb=self._on_llm_debug)
         self.emotions = EmotionEngine()
 
         self._build_style()
         self._build_layout()
         self._reset_stats()
         self._refresh_ports()
+
 
     def _build_style(self) -> None:
         style = ttk.Style(self.root)
@@ -47,6 +52,7 @@ class NierDesktopApp:
         style.configure("Section.TLabelframe.Label", font=("Segoe UI", 11, "bold"))
         style.configure("Primary.TButton", font=("Segoe UI", 10, "bold"))
         style.configure("Chat.TText", font=("Consolas", 10))
+
 
     def _build_layout(self) -> None:
         root = self.root
@@ -136,6 +142,7 @@ class NierDesktopApp:
         self.debug_frame = ttk.Labelframe(chat_frame, text="Debug informatie", style="Section.TLabelframe")
         self.debug_frame.grid(row=4, column=0, sticky="ew", pady=(12, 0))
         self.debug_frame.columnconfigure(1, weight=1)
+
         self._debug_row(self.debug_frame, 0, "Antwoord (PC)")
         self._debug_row(self.debug_frame, 1, "LCD regel 1")
         self._debug_row(self.debug_frame, 2, "LCD regel 2")
@@ -144,6 +151,7 @@ class NierDesktopApp:
         self._debug_row(self.debug_frame, 5, "LED matrix")
         self._debug_row(self.debug_frame, 6, "Laatste TX")
         self._debug_row(self.debug_frame, 7, "Laatste RX")
+
         self.debug_frame.grid_remove()
 
     def _build_status_panel(self, parent: ttk.Frame) -> None:
@@ -175,6 +183,7 @@ class NierDesktopApp:
         emotions_frame.columnconfigure(1, weight=1)
 
         self.emotion_bars = {}
+
         for idx, name in enumerate(EMOTIONS):
             ttk.Label(emotions_frame, text=name).grid(row=idx, column=0, sticky="w")
             bar = ttk.Progressbar(emotions_frame, maximum=100, value=self.emotion_values[name])
@@ -201,11 +210,13 @@ class NierDesktopApp:
         self.battery_bar = ttk.Progressbar(battery_frame, maximum=100, value=0)
         self.battery_bar.grid(row=0, column=1, sticky="ew", padx=(8, 0))
 
+
     def _telemetry_row(self, parent: ttk.Frame, row: int, label: str, value: str) -> None:
         ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w")
         var = tk.StringVar(value=value)
         ttk.Label(parent, textvariable=var).grid(row=row, column=1, sticky="w", padx=(8, 0))
         self.telemetry_vars[label] = var
+
 
     def _debug_row(self, parent: ttk.Frame, row: int, label: str) -> None:
         ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w")
@@ -215,30 +226,41 @@ class NierDesktopApp:
         )
         self.debug_vars[label] = var
 
+
     def _on_send(self, event=None) -> None:
         message = self.message_entry.get().strip()
+
         if not message:
             return
+
         self.message_entry.delete(0, "end")
         self.response_label.configure(text="Antwoord wordt berekend...")
         self._set_debug("Laatste TX", f"Lokaal bericht: {message}")
+        self.logger.log("USER_MSG", message)
         threading.Thread(target=self._process_message_thread, args=(message,), daemon=True).start()
 
+
     def _process_message_thread(self, message: str) -> None:
-        response = self._handle_basic_intent(message)
-        if response is None:
-            response = self.llm.generate_response(message)
-        temp_history = list(self.recent_messages)
-        temp_history.append(f"Gebruiker: {message}")
-        temp_history.append(f"Robot: {response}")
-        context_text = " ".join(temp_history[-3:])
-        sentimentscore = self.llm.sentiment_score(context_text)
-        emotions = self.emotions.compute(context_text, sentimentscore)
-        self.root.after(0, lambda: self._apply_response(message, response, emotions))
+        try:
+            response = self._handle_basic_intent(message)
+            if response is None:
+                response = self.llm.generate_response(message)
+            temp_history = list(self.recent_messages)
+            temp_history.append(f"Gebruiker: {message}")
+            temp_history.append(f"Robot: {response}")
+            context_text = " ".join(temp_history[-3:])
+            sentimentscore = self.llm.sentiment_score(context_text)
+            emotions = self.emotions.compute(context_text, sentimentscore)
+            self.root.after(0, lambda: self._apply_response(message, response, emotions))
+        except Exception as exc:
+            self.logger.log("ERROR", f"Message verwerking faalde: {exc}")
+            self.root.after(0, lambda: self.response_label.configure(text="Er ging iets mis."))
+
 
     def _apply_response(self, message: str, response: str, emotions: dict) -> None:
         self.response_label.configure(text=response)
         self._set_debug("Antwoord (PC)", response)
+        self.logger.log("ROBOT_MSG", response)
         self._update_lcd(response)
         self._start_lcd_scroll(response)
         self._set_debug("LCD regel 1", self.lcd_line1.cget("text"))
@@ -257,12 +279,16 @@ class NierDesktopApp:
         else:
             self._set_telemetry("Laatste Commando", "-")
 
+
     def _handle_basic_intent(self, message: str) -> str | None:
         lowered = message.lower()
+
         if any(phrase in lowered for phrase in ["hoe laat", "tijd is het", "hoe laat is het", "tijd?"]):
             now = datetime.now().strftime("%H:%M:%S")
             return f"Het is {now}."
+        
         return None
+
 
     def _update_lcd(self, text: str) -> None:
         line1 = text[:16].ljust(16)
@@ -270,39 +296,52 @@ class NierDesktopApp:
         self.lcd_line1.config(text=line1)
         self.lcd_line2.config(text=line2)
 
+
     def _start_lcd_scroll(self, text: str) -> None:
         cleaned = text.replace("\n", " ").replace("\r", " ").replace(",", " ").strip()
+
         if not cleaned:
             cleaned = " "
+
         self.lcd_scroll_text = cleaned
         self.lcd_scroll_index = 0
+
         if self.lcd_scroll_after_id:
             self.root.after_cancel(self.lcd_scroll_after_id)
             self.lcd_scroll_after_id = None
+
         self._schedule_lcd_scroll()
 
+
     def _schedule_lcd_scroll(self) -> None:
-        if len(self.lcd_scroll_text) <= 16:
+        if len(self.lcd_scroll_text) <= 32:
             return
+
         buffer = f"{self.lcd_scroll_text}    {self.lcd_scroll_text}"
         start = self.lcd_scroll_index
         view = buffer[start:start + 32].ljust(32)
         self.lcd_line1.config(text=view[:16])
         self.lcd_line2.config(text=view[16:32])
         self.lcd_scroll_index += 1
+
         if self.lcd_scroll_index > len(self.lcd_scroll_text):
             self.lcd_scroll_index = 0
+
         self.lcd_scroll_after_id = self.root.after(450, self._schedule_lcd_scroll)
 
-    def _truncate_for_serial(self, text: str, limit: int = 120) -> str:
+
+    def _truncate_for_serial(self, text: str, limit: int = 128) -> str:
         trimmed = text.replace("\n", " ").replace("\r", " ").strip()
         if len(trimmed) <= limit:
             return trimmed
+        
         return trimmed[:limit].rstrip()
+
 
     def _serialize_emotions(self, emotions: dict) -> str:
         values = [str(emotions.get(name, 0)) for name in EMOTIONS]
         return ",".join(values)
+
 
     def _set_emotion(self, name: str, value: int) -> None:
         value = max(0, min(100, value))
@@ -311,40 +350,52 @@ class NierDesktopApp:
         bar.configure(value=value)
         label.configure(text=f"{value}%")
 
+
     def _toggle_connection(self) -> None:
         if self.connected:
             self._disconnect()
         else:
             self._connect()
 
+
     def _connect(self) -> None:
         port = self.port_var.get()
+
         if not port:
             self.connection_status.configure(text="Status: Geen COM-poort geselecteerd")
+            self.logger.log("CONNECT_FAIL", "Geen COM-poort geselecteerd")
             return
         ok, err = self.serial.connect(port)
         if not ok:
             self.connection_status.configure(text=f"Status: Fout - {err}")
+            self.logger.log("CONNECT_FAIL", err)
             return
 
         self.connected = True
         self.connect_button.configure(text="Verbreken")
         self.connection_status.configure(text=f"Status: Verbonden ({port})")
+        self.logger.log("CONNECT_OK", f"Verbonden met {port}")
+
         self._reset_stats()
         self._send_line("HELLO")
         self._poll_serial()
 
+
     def _disconnect(self) -> None:
         self.connect_button.configure(text="Verbinden")
         self.connection_status.configure(text="Status: Offline")
+        self.logger.log("DISCONNECT", "Verbinding verbroken")
         self._safe_stop()
+
 
     def _safe_stop(self) -> None:
         self.serial.safe_stop()
         self.connected = False
 
+
     def _send_line(self, line: str) -> None:
         self.serial.send_line(line)
+
 
     def _poll_serial(self) -> None:
         if not self.connected or not self.serial.serial_port:
@@ -362,36 +413,48 @@ class NierDesktopApp:
                     self._handle_line(line)
         except serial.SerialException as exc:
             self.connection_status.configure(text=f"Status: Verbroken - {exc}")
+            self.logger.log("SERIAL_ERR", str(exc))
             self._disconnect()
             return
+
         self.root.after(100, self._poll_serial)
+
 
     def _handle_line(self, line: str) -> None:
         self._set_debug("Laatste RX", line)
+        self.logger.log("RX", line)
+
         if line == "READY":
             self._set_telemetry("Navigatie Modus", "Online")
             return
+
         if line.startswith("ACK:"):
             self._set_telemetry("Laatste Commando", line[4:])
             return
+
         if line.startswith("STAT:"):
             payload = line[5:]
             parts = payload.split(",")
+
             if len(parts) >= 5:
                 self._set_telemetry("Sonar Links", f"{parts[0]} cm")
                 self._set_telemetry("Sonar Rechts", f"{parts[1]} cm")
                 self._set_telemetry("Dichtste Afstand", f"{parts[2]} cm")
                 self.battery_bar.configure(value=self._safe_int(parts[3]))
                 self._set_telemetry("Navigatie Modus", parts[4])
+
             return
+
         if line.startswith("OUT:"):
             payload = line[4:]
             parts = payload.split(",")
+
             if len(parts) >= 6:
                 rgb = f"{parts[0]},{parts[1]},{parts[2]}"
                 buzzer = "Aan" if parts[3] == "1" else "Uit"
                 matrix = parts[4]
                 lcd = ",".join(parts[5:]).strip()
+
                 self._set_debug("RGB LED", rgb)
                 self._set_debug("Buzzer", buzzer)
                 self._set_debug("LED matrix", matrix)
@@ -399,23 +462,36 @@ class NierDesktopApp:
                 self._set_debug("LCD regel 2", lcd[16:32].ljust(16))
                 self._update_lcd(lcd)
                 self._set_telemetry("RGB Status", rgb)
+                
             return
+        
         if line.startswith("EMO:"):
             payload = line[4:]
             parts = payload.split(",")
+
             if len(parts) >= 8:
                 for name, value in zip(EMOTIONS, parts[:8]):
                     self._set_emotion(name, self._safe_int(value))
+
 
     def _set_telemetry(self, label: str, value: str) -> None:
         var = self.telemetry_vars.get(label)
         if var:
             var.set(value)
 
+
     def _set_debug(self, label: str, value: str) -> None:
         var = self.debug_vars.get(label)
         if var:
             var.set(value)
+
+    def _on_serial_tx_debug(self, msg: str) -> None:
+        self._set_debug("Laatste TX", msg)
+        self.logger.log("TX", msg)
+
+    def _on_llm_debug(self, msg: str) -> None:
+        self.root.after(0, lambda: self._set_debug("Laatste RX", msg))
+        self.logger.log("LLM", msg)
 
     def _toggle_debug_panel(self) -> None:
         if self.debug_enabled.get():
@@ -425,33 +501,42 @@ class NierDesktopApp:
             self.debug_frame.grid_remove()
             self.lcd_frame.grid_remove()
 
+
     def _safe_int(self, value: str) -> int:
         try:
             return int(value)
         except ValueError:
             return 0
 
+
     def _refresh_ports(self) -> None:
         ports = self.serial.refresh_ports()
         menu = self.port_menu["menu"]
         menu.delete(0, "end")
+
         for port in ports:
             menu.add_command(label=port, command=tk._setit(self.port_var, port))
+
         if self.port_var.get() not in ports:
             self.port_var.set(ports[0])
 
+
     def _reset_stats(self) -> None:
         self.emotions.reset()
+
         for name in EMOTIONS:
             self._set_emotion(name, 0)
+
         self._set_telemetry("Sonar Links", "0 cm")
         self._set_telemetry("Sonar Rechts", "0 cm")
         self._set_telemetry("Dichtste Afstand", "0 cm")
         self._set_telemetry("Navigatie Modus", "Offline")
         self._set_telemetry("Laatste Commando", "-")
         self._set_telemetry("RGB Status", "-")
+
         self.battery_bar.configure(value=0)
         self.response_label.configure(text="...")
+
         self._set_debug("Antwoord (PC)", "-")
         self._set_debug("LCD regel 1", " " * 16)
         self._set_debug("LCD regel 2", " " * 16)
@@ -460,15 +545,37 @@ class NierDesktopApp:
         self._set_debug("LED matrix", "-")
         self._set_debug("Laatste TX", "-")
         self._set_debug("Laatste RX", "-")
+
         if self.lcd_scroll_after_id:
             self.root.after_cancel(self.lcd_scroll_after_id)
             self.lcd_scroll_after_id = None
+
         self.lcd_scroll_text = ""
         self.lcd_scroll_index = 0
 
+
     def _on_close(self) -> None:
         self._safe_stop()
+        self.logger.log("APP_STOP", "Desktop app afgesloten")
         self.root.destroy()
+
+
+class AppLogger:
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        base_dir = Path(__file__).resolve().parents[2]
+        self.log_dir = base_dir / "logs"
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.log_path = self.log_dir / f"session_{timestamp}.log"
+
+
+    def log(self, category: str, message: str) -> None:
+        if message is None:
+            return
+        line = f"{datetime.now().isoformat(timespec='seconds')} [{category}] {message}\n"
+        with self.lock:
+            self.log_path.open("a", encoding="utf-8").write(line)
 
 
 def run_app() -> None:
@@ -476,6 +583,3 @@ def run_app() -> None:
     app = NierDesktopApp(root)
     root.protocol("WM_DELETE_WINDOW", app._on_close)
     root.mainloop()
-
-
-
