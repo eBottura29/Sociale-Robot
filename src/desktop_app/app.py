@@ -1,4 +1,6 @@
 import threading
+import time
+import random
 from datetime import datetime
 from collections import deque
 from pathlib import Path
@@ -33,6 +35,13 @@ class NierDesktopApp:
 
         self.logger = AppLogger()
         self.logger.log("APP_START", "Desktop app gestart")
+
+        self.navigation_enabled = True
+        self.nav_until = 0.0
+        self.nav_left = 0
+        self.nav_right = 0
+        self.nav_last_cmd = 0.0
+        self.nav_cmd_interval = 0.4
 
         self.serial = SerialManager(debug_cb=self._on_serial_tx_debug)
         self.llm = LlmEngine(debug_cb=self._on_llm_debug)
@@ -180,12 +189,10 @@ class NierDesktopApp:
         self.connection_status = ttk.Label(connection, text="Status: Offline")
         self.connection_status.grid(row=1, column=1, columnspan=2, sticky="w", padx=(8, 0), pady=(8, 0))
 
-        self.reset_button = ttk.Button(connection, text="Reset", command=self._send_reset, state="disabled")
+        self.reset_button = ttk.Button(connection, text="Reset", command=self._send_reset)
         self.reset_button.grid(row=2, column=0, pady=(6, 0), sticky="w")
         self.reset_label = ttk.Label(connection, text="Soft reset (staat blijft bewaard)")
         self.reset_label.grid(row=2, column=1, columnspan=2, sticky="w", padx=(8, 0), pady=(6, 0))
-        self.reset_button.grid_remove()
-        self.reset_label.grid_remove()
 
         emotions_frame = ttk.Labelframe(status_frame, text="Emotie statistieken", style="Section.TLabelframe")
         emotions_frame.grid(row=1, column=0, sticky="ew", pady=(0, 12))
@@ -387,7 +394,6 @@ class NierDesktopApp:
         self.connect_button.configure(text="Verbreken")
         self.connection_status.configure(text=f"Status: Verbonden ({port})")
         self.logger.log("CONNECT_OK", f"Verbonden met {port}")
-        self.reset_button.configure(state="normal")
 
         self._reset_stats()
         self._send_line("HELLO")
@@ -398,7 +404,6 @@ class NierDesktopApp:
         self.connect_button.configure(text="Verbinden")
         self.connection_status.configure(text="Status: Offline")
         self.logger.log("DISCONNECT", "Verbinding verbroken")
-        self.reset_button.configure(state="disabled")
         self._safe_stop()
 
 
@@ -411,11 +416,79 @@ class NierDesktopApp:
         self.serial.send_line(line)
 
     def _send_reset(self) -> None:
+        self._perform_full_reset()
         if not self.connected or not self.serial.serial_port:
-            self._set_debug("Laatste TX", "RESET (niet verbonden)")
+            self._set_debug("Laatste TX", "RESET (lokaal)")
             return
         self._send_line("RESET")
         self._set_telemetry("Laatste Commando", "RESET")
+        self.logger.log("TX", "RESET")
+
+    def _perform_full_reset(self) -> None:
+        self.conversation_history.clear()
+        self.recent_messages.clear()
+        self._reset_stats()
+        self.response_label.configure(text="...")
+        self.lcd_line1.config(text=" " * 16)
+        self.lcd_line2.config(text=" " * 16)
+        if self.lcd_scroll_after_id:
+            self.root.after_cancel(self.lcd_scroll_after_id)
+            self.lcd_scroll_after_id = None
+        self.lcd_scroll_text = ""
+        self.lcd_scroll_index = 0
+        self.logger.log("RESET", "Volledige reset (PC)")
+
+    def _send_move(self, left: int, right: int) -> None:
+        left = max(-255, min(255, int(left)))
+        right = max(-255, min(255, int(right)))
+        now = time.time()
+        if now - self.nav_last_cmd < self.nav_cmd_interval:
+            return
+        self.nav_last_cmd = now
+        if self.connected and self.serial.serial_port:
+            self._send_line(f"MOVE:{left},{right}")
+            self._set_telemetry("Laatste Commando", f"MOVE {left},{right}")
+            self.logger.log("TX", f"MOVE:{left},{right}")
+
+    def _update_navigation(self, sonar_left: int, sonar_right: int) -> None:
+        if not self.navigation_enabled:
+            return
+        if not self.connected or not self.serial.serial_port:
+            return
+        left = sonar_left if sonar_left > 0 else 999
+        right = sonar_right if sonar_right > 0 else 999
+        closest = min(left, right)
+        now = time.time()
+
+        if closest <= 20:
+            if left < right:
+                self._send_move(-40, 40)
+            else:
+                self._send_move(40, -40)
+            self._set_telemetry("Navigatie Modus", "AVOID")
+            return
+
+        if closest <= 60:
+            if left < right:
+                self._send_move(25, 45)
+            else:
+                self._send_move(45, 25)
+            self._set_telemetry("Navigatie Modus", "APPROACH")
+            return
+
+        if now >= self.nav_until:
+            choice = random.choice(["FORWARD", "TURN_L", "TURN_R"])
+            if choice == "FORWARD":
+                self.nav_left, self.nav_right = 35, 35
+                self.nav_until = now + 1.2
+            elif choice == "TURN_L":
+                self.nav_left, self.nav_right = -30, 30
+                self.nav_until = now + 0.8
+            else:
+                self.nav_left, self.nav_right = 30, -30
+                self.nav_until = now + 0.8
+        self._send_move(self.nav_left, self.nav_right)
+        self._set_telemetry("Navigatie Modus", "SEARCH")
 
 
     def _poll_serial(self) -> None:
@@ -458,11 +531,15 @@ class NierDesktopApp:
             parts = payload.split(",")
 
             if len(parts) >= 5:
-                self._set_telemetry("Sonar Links", f"{parts[0]} cm")
-                self._set_telemetry("Sonar Rechts", f"{parts[1]} cm")
-                self._set_telemetry("Dichtste Afstand", f"{parts[2]} cm")
+                sonar_left = self._safe_int(parts[0])
+                sonar_right = self._safe_int(parts[1])
+                closest = self._safe_int(parts[2])
+                self._set_telemetry("Sonar Links", f"{sonar_left} cm")
+                self._set_telemetry("Sonar Rechts", f"{sonar_right} cm")
+                self._set_telemetry("Dichtste Afstand", f"{closest} cm")
                 self.battery_bar.configure(value=self._safe_int(parts[3]))
                 self._set_telemetry("Navigatie Modus", parts[4])
+                self._update_navigation(sonar_left, sonar_right)
 
             return
 
@@ -519,14 +596,10 @@ class NierDesktopApp:
             self.debug_frame.grid()
             self.lcd_frame.grid()
             self.response_frame.grid()
-            self.reset_button.grid()
-            self.reset_label.grid()
         else:
             self.debug_frame.grid_remove()
             self.lcd_frame.grid_remove()
             self.response_frame.grid_remove()
-            self.reset_button.grid_remove()
-            self.reset_label.grid_remove()
 
 
     def _safe_int(self, value: str) -> int:

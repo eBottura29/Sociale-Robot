@@ -8,6 +8,8 @@ from config import (
     SENTIMENT_MODEL_NAME,
     LLM_ALLOW_DOWNLOAD,
     LLM_MAX_NEW_TOKENS,
+    LLM_MIN_NEW_TOKENS,
+    LLM_REPETITION_PENALTY,
     LLM_TEMPERATURE,
     LLM_TOP_P,
 )
@@ -41,8 +43,10 @@ class LlmEngine:
         prompt = (
             "System:\n"
             "Je bent NIER, een vriendelijke sociale robot. Antwoord altijd in het Nederlands.\n"
-            "Stijl: empathisch, duidelijk, natuurlijk. Stel af en toe een korte vervolgvraag.\n"
-            "Regels: blijf bij wat de gebruiker zegt; verzin geen feiten. Houd antwoorden beknopt.\n\n"
+            "Stijl: informeel, warm, menselijk. Spreek de gebruiker met 'je/jij' aan.\n"
+            "Regels: blijf bij wat de gebruiker zegt; verzin geen feiten; geen rare herhaling.\n"
+            "Vermijd formele woorden of plechtige zinnen. Antwoord direct op de vraag.\n"
+            "Formaat: maximaal 1-2 zinnen, maximaal 20 woorden. Geen afgebroken zinnen.\n\n"
             f"Emoties (percentages): {emotion_lines}\n"
             f"Dominante emotie: {dominant}\n\n"
             "Gespreksgeschiedenis:\n"
@@ -55,16 +59,18 @@ class LlmEngine:
                 output = self.generator(
                     prompt,
                     max_new_tokens=LLM_MAX_NEW_TOKENS,
+                    min_new_tokens=LLM_MIN_NEW_TOKENS,
                     do_sample=True,
                     temperature=LLM_TEMPERATURE,
                     top_p=LLM_TOP_P,
+                    repetition_penalty=LLM_REPETITION_PENALTY,
                 )
             generated = output[0]["generated_text"]
             reply = generated[len(prompt) :].strip()
             if not reply:
                 return self._error_response()
             dutch = reply.split("\n")[0].strip()
-            return dutch
+            return self._truncate_reply(dutch)
         except Exception:
             return self._error_response()
 
@@ -136,6 +142,34 @@ class LlmEngine:
         detail = self.model_error or "LLM niet beschikbaar."
         self._debug(f"{code}: {detail}")
         return f"ERROR CODE {code} - Check log voor details."
+
+    def _truncate_reply(self, text: str) -> str:
+        if not text:
+            return text
+        parts = []
+        for chunk in text.replace("!", ".").replace("?", ".").split("."):
+            chunk = chunk.strip()
+            if chunk:
+                parts.append(chunk)
+            if len(parts) >= 2:
+                break
+        if parts:
+            text = ". ".join(parts).strip()
+            if not text.endswith("."):
+                text += "."
+        words = text.split()
+        if len(words) > 20:
+            text = " ".join(words[:20]).rstrip()
+            if not text.endswith("."):
+                text += "."
+        lowered = text.lower().strip()
+        if lowered.endswith("wil je dat."):
+            text = text[:-1] + "?"
+        if lowered.endswith("wil je dat"):
+            text = text + "?"
+        if lowered.endswith("ik wil"):
+            text = text + "..."
+        return text
 
     def _debug(self, message: str) -> None:
         if self.debug_cb:
