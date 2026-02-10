@@ -260,7 +260,7 @@ git clone https://github.com/eBottura29/Sociale-Robot
 cd Sociale-Robot
 
 # Installeer dependencies
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 **requirements.txt:**
@@ -373,14 +373,14 @@ python src/desktop_app/main.py
 ### RGB LED Toepassingen
 
 Mogelijke toepassingen voor de RGB LED:
-- ðŸ”´ **Rood**: Laag batterij
-- ðŸŸ¢ **Groen**: Alles OK / Verbonden
-- ðŸ”µ **Blauw**: Aan het "denken" (LLM verwerkt)
-- ðŸŸ¡ **Geel**: Wacht op input
-- ðŸŸ£ **Paars**: Navigatie modus
-- âšª **Wit**: Aandacht nodig
-- ðŸŽ¨ **Regenboog**: Gelukkig/feestmodus
-- ðŸ”¶ **Oranje**: Waarschuwing (obstakel)
+- **Rood**: Laag batterij
+- **Groen**: Alles OK / Verbonden
+- **Blauw**: Aan het "denken" (LLM verwerkt)
+- **Geel**: Wacht op input
+- **Paars**: Navigatie modus
+- **Wit**: Aandacht nodig
+- **Regenboog**: Gelukkig/feestmodus
+- **Oranje**: Waarschuwing (obstakel)
 
 ### Emotie Stats Verwerking
 

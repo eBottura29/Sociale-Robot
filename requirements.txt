@@ -1,4 +1,7 @@
-﻿pyserial>=3.5
+# Core runtime dependencies
+pyserial>=3.5
+
+# LLM + sentiment
 transformers>=4.30.0
 torch>=2.0.0
 sentencepiece>=0.1.99
