@@ -4,6 +4,33 @@
 #include <NewPing.h>
 #include <Servo.h>
 
+// --- Dwenguino simulator compatibility shims ---
+// Some simulator builds expose the LCD helpers but not the LED matrix/RGB helpers.
+// Keep LED matrix calls as no-ops when the API isn't available so the sketch compiles.
+static inline void compatClearLedMatrix() {}
+
+static inline void compatSetLedMatrixPixel(int x, int y, bool on) {
+  (void)x;
+  (void)y;
+  (void)on;
+}
+
+static inline void compatSetRGBLed(int r, int g, int b) {
+#if defined(LED_R) && defined(LED_G) && defined(LED_B)
+  analogWrite(LED_R, constrain(r, 0, 255));
+  analogWrite(LED_G, constrain(g, 0, 255));
+  analogWrite(LED_B, constrain(b, 0, 255));
+#elif defined(RGB_LED_R) && defined(RGB_LED_G) && defined(RGB_LED_B)
+  analogWrite(RGB_LED_R, constrain(r, 0, 255));
+  analogWrite(RGB_LED_G, constrain(g, 0, 255));
+  analogWrite(RGB_LED_B, constrain(b, 0, 255));
+#else
+  (void)r;
+  (void)g;
+  (void)b;
+#endif
+}
+
 // Serieel protocol (regels, ASCII, newline)
 // PC -> Robot
 // - HELLO
@@ -143,11 +170,11 @@ void scanSonars(float readings[2]) {
 }
 
 void setMatrixPattern(const byte pattern[8]) {
-  clearLedMatrix();
+  compatClearLedMatrix();
   for (int y = 0; y < 8; y++) {
     for (int x = 0; x < 8; x++) {
       bool on = (pattern[y] >> (7 - x)) & 0x01;
-      setLedMatrixPixel(x, y, on);
+      compatSetLedMatrixPixel(x, y, on);
     }
   }
 }
@@ -174,7 +201,7 @@ void applyEmotionOutputs() {
     case 6: currentRgb[0] = 0; currentRgb[1] = 255; currentRgb[2] = 255; break;  // Curiosity
     default: currentRgb[0] = 255; currentRgb[1] = 70; currentRgb[2] = 0; break;  // Frustration
   }
-  setRGBLed(currentRgb[0], currentRgb[1], currentRgb[2]);
+  compatSetRGBLed(currentRgb[0], currentRgb[1], currentRgb[2]);
 
   currentBuzzerOn = (currentEmo[4] > 70 || currentEmo[7] > 70);
   if (currentBuzzerOn) {
@@ -276,7 +303,7 @@ void handleLine(String line) {
         hasValue = true;
       } else if (c == ',' || i == payload.length()) {
         if (hasValue && idx < EMO_COUNT) {
-          currentEmo[idx++] = value;
+          currentEmo[idx++] = constrain(value, 0, 100);
         }
         value = 0;
         hasValue = false;
@@ -318,7 +345,7 @@ void setup() {
   Serial.begin(9600);
 
   updateLCD(" ");
-  clearLedMatrix();
+  compatClearLedMatrix();
   applyEmotionOutputs();
 }
 
@@ -347,7 +374,7 @@ void loop() {
   if (lcdScrollLength > 16 && millis() - lastLcdScrollMs >= LCD_SCROLL_INTERVAL_MS) {
     lastLcdScrollMs = millis();
     lcdScrollIndex++;
-    if (lcdScrollIndex > lcdScrollLength) {
+    if (lcdScrollIndex >= lcdScrollLength) {
       lcdScrollIndex = 0;
     }
     int start = lcdScrollIndex;
