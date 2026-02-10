@@ -164,9 +164,10 @@ Desktop App Features:
 - GUI Interface (tkinter)
   - Tekstinvoer venster
   - Emotie/stats visualisatie
+- Debug panel met Antwoord (PC), LCD preview en resetknop
 - LLM Integratie
   - HuggingFace model lokaal (transformers)
-  - Prompt engineering
+  - Prompt met gespreksgeschiedenis + emotiepercentages
 - Emotie Verwerking AI
   - Sentiment analyse
   - Emotie classificatie
@@ -174,16 +175,18 @@ Desktop App Features:
 - Seriele Communicatie
   - Arduino Serial protocol
   - Commando formatting
+- Logging
+  - Per sessie logbestand in `logs/`
 ```
 
 #### 2. LLM Opties (Gratis)
-**Actuele implementatie:** Qwen/Qwen2.5-7B-Instruct (Nederlands, lokaal)
+**Actuele implementatie:** `meta-llama/Llama-3.2-1B-Instruct` (lichtgewicht, lokaal)
 Mogelijke gratis LLM's via HuggingFace:
+- **Llama 3.2 1B/3B** - Licht tot middelzwaar
 - **GPT-2** - Lichtgewicht, snel
 - **BLOOM** - Meertalig (Nederlands!)
 - **Flan-T5** - Goed in gesprekken
 - **DistilGPT-2** - Compacte versie
-- **LLaMA 2** (7B) - Via HuggingFace Inference API
 
 #### 3. Emotie Verwerking
 - **Sentiment Analysis Models**:
@@ -193,15 +196,30 @@ Mogelijke gratis LLM's via HuggingFace:
 
 #### 4. Navigatie Logica
 ```python
-# Pseudocode
+# Implementatie (desktop app)
+# - Bij dichtbij object: ontwijken
+# - Bij object in bereik: benaderen met kleine stuurcorrectie
+# - Anders: willekeurige zoekbewegingen
 sonar_left, sonar_right = get_sonar_data()
-if object_found(sonar_left, sonar_right):
-    point_to_object()
-    move_to_object()
+closest = min(nonzero_or_far(sonar_left), nonzero_or_far(sonar_right))
+
+if closest <= 20:
+    # AVOID
+    if sonar_left < sonar_right:
+        send_move(-40, 40)   # draai weg
+    else:
+        send_move(40, -40)
+elif closest <= 60:
+    # APPROACH
+    if sonar_left < sonar_right:
+        send_move(25, 45)    # richting object
+    else:
+        send_move(45, 25)
 else:
-    move_randomly()
-    search_for_object()
+    # SEARCH
+    choose random: forward / turn left / turn right
 ```
+Deze logica draait in de desktop app en stuurt `MOVE:<left>,<right>` commando's naar de robot.
 
 ### Robot Software (C++)
 
@@ -270,9 +288,11 @@ transformers>=4.30.0
 torch>=2.0.0
 sentencepiece>=0.1.99
 ```
-pyserial>=3.5
-tkinter
-```
+
+**Hugging Face token (voor gated modellen):**
+1. Vraag toegang aan op de modelpagina (bijv. Llama 3.2).
+2. Zet je token in `.hf_token` (repo root), alleen de token-string.
+3. Zorg dat `LLM_ALLOW_DOWNLOAD = True` staat in `src/desktop_app/config.py`.
 
 ### Robot Setup
 
@@ -301,6 +321,10 @@ python src/desktop_app/main.py
 ### 3. Selecteer COM Poort
 - Kies correcte poort in de app (bijv. COM3, /dev/ttyUSB0)
 - Klik "Connect"
+
+### Debug & Reset
+- Zet **Debug info tonen** aan om **Antwoord (PC)**, **LCD preview** en **Reset** te zien.
+- **Reset** stuurt `RESET` naar de robot en wist lokaal de conversatie + UI-stats.
 
 ### 4. Begin Conversatie
 - Typ een bericht in het invoerveld
