@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+*.log
+
+# Environment / secrets
+.env
+.hf_token
+
+# Logs directory
+logs/
