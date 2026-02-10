@@ -35,7 +35,7 @@ NIER is een sociale companion robot die ontworpen is om eenzaamheid te bestrijde
 
 Het project maakt gebruik van:
 - **Dwenguino microcontroller** voor robotcontrole
-- **Gratis LLM** (Large Language Model) van HuggingFace voor natuurlijke conversaties
+- **Gratis LLM** (Large Language Model) van HuggingFace voor natuurlijke conversaties (Nederlands)
 - **Emotie-verwerkings AI** die de stemming van gesprekken analyseert
 - **Tank rups systeem** voor autonome navigatie
 - **LED matrices** voor emotionele expressie
@@ -73,8 +73,7 @@ Dit robotconcept kan ook ingezet worden voor:
 ## Kenmerken
 
 ### Conversatie & AI
-- Natuurlijke gesprekken via LLM (HuggingFace, lokaal, Engels)
-- NL -> EN vertaling voor de LLM en EN -> NL vertaling na de LLM (mBART)
+- Natuurlijke gesprekken via LLM (HuggingFace, lokaal, Nederlands)
 - Emotie-detectie en -verwerking van conversaties (nlptown/bert-base-multilingual-uncased-sentiment)
 - Desktop applicatie voor tekstcommunicatie
 - Real-time communicatie via seriele verbinding (PySerial)
@@ -178,7 +177,7 @@ Desktop App Features:
 ```
 
 #### 2. LLM Opties (Gratis)
-**Actuele implementatie:** openai-community/gpt2-large (Engels, lokaal) + facebook/mbart-large-50-many-to-many-mmt (vertaling NL <-> EN)
+**Actuele implementatie:** Qwen/Qwen2.5-7B-Instruct (Nederlands, lokaal)
 Mogelijke gratis LLM's via HuggingFace:
 - **GPT-2** - Lichtgewicht, snel
 - **BLOOM** - Meertalig (Nederlands!)
