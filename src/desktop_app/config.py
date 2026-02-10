@@ -9,7 +9,7 @@
     "Frustration",
 ]
 
-LLM_MODEL_NAME = "meta-llama/Llama-3.1-8B-Instruct"
+LLM_MODEL_NAME = "meta-llama/Llama-3.2-1B-Instruct"
 SENTIMENT_MODEL_NAME = "nlptown/bert-base-multilingual-uncased-sentiment"
 LLM_ALLOW_DOWNLOAD = True
 LLM_MAX_NEW_TOKENS = 40
