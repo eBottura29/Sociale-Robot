@@ -204,7 +204,7 @@ void softResetState() {
   noTone(BUZZER);
   updateLCD(" ");
   compatClearLedMatrix();
-  applyEmotionOutputs();
+  compatSetRGBLed(0, 0, 0);
 }
 
 void applyEmotionOutputs() {
