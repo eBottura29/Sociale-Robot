@@ -87,9 +87,7 @@ def run_monitor(
             elif line.startswith("[SKIP]"):
                 stats.skipped += 1
 
-            if auto_ping and (
-                "Optional serial RX test" in line or "Send PING 8 sec" in line
-            ):
+            if auto_ping and ("Optional serial RX test" in line or "Send PING 8 sec" in line):
                 ser.write(b"PING\n")
                 print(f"[{timestamp}] [TX] PING")
 
@@ -119,9 +117,7 @@ def run_monitor(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Terminal monitor for src/robot/testing/hardware_test.cpp output."
-    )
+    parser = argparse.ArgumentParser(description="Terminal monitor for src/robot/testing/hardware_test.cpp output.")
     parser.add_argument("--port", help="Serial port (example: COM3)")
     parser.add_argument("--baud", type=int, default=9600, help="Baud rate (default: 9600)")
     parser.add_argument(
