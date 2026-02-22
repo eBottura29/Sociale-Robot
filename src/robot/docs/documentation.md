@@ -11,6 +11,9 @@ Use these paths as your reference when reading or modifying the project.
 
 - `src/desktop_app/` Python desktop app (GUI, LLM, emotions, serial, navigation).
 - `src/robot/firmware/main.cpp` Robot firmware for Dwenguino.
+- `src/robot/testing/hardware_test.cpp` Full staged hardware test sketch.
+- `src/robot/testing/HARDWARE_TEST.md` Expected outcomes and troubleshooting for the hardware test.
+- `src/robot/prototyping/` Older one-off experiments and prototype sketches.
 - `src/robot/docs/documentation.md` This document.
 - `requirements.txt` Python dependencies.
 - `.hf_token` Hugging Face token (not committed).
@@ -25,10 +28,10 @@ Minimum hardware used by this project.
 - Dwenguino board (PIC18F4550 platform).
 - 2x ultrasonic sonar sensors (HC-SR04 compatible).
 - 2x 360 degree continuous rotation servos (drive).
-- 1x 180 degree servo (sensor mount or eyebrows).
+- 1x 180 degree servo (sonar pan mount).
 - LCD 16x2 display (on-board).
-- 8x8 LED matrix (on-board).
-- RGB LED (on-board).
+- LED matrix display(s), if installed.
+- RGB LED, if installed.
 - Buzzer (on-board).
 - USB cable for serial and power.
 - Power for motors if required (external if USB not enough).
@@ -51,19 +54,16 @@ The firmware defines the pins used by the robot. Wire your hardware to match the
 - Servo 1: pin `40`
 - Servo 2: pin `41`
 - Servo 3: pin `19`
-- Servo 4: pin `18`
-- Servo 5: pin `17`
-- Servo 6: pin `16`
 
 ### 3.3 Built-in peripherals
 
 These are on-board and do not need wiring.
 
 - LCD 16x2
-- LED matrix 8x8
-- RGB LED
 - Buzzer
 - Buttons (SW_N, SW_E, SW_S, SW_W, SW_C)
+
+If you added external RGB or matrix hardware, use your project-specific wiring map.
 
 ---
 
@@ -85,6 +85,14 @@ The firmware is in `src/robot/firmware/main.cpp`.
 - Sends telemetry at a fixed interval.
 - Updates LCD, LED matrix, RGB, and buzzer based on commands.
 - Performs a soft reset when `RESET` is received.
+
+### 4.3 Full hardware validation sketch
+
+Use this before demo day or after rewiring:
+
+- Flash `src/robot/testing/hardware_test.cpp`
+- Follow `src/robot/testing/HARDWARE_TEST.md` for expected pass/fail behavior
+- Press `SW_C` to rerun the full test suite
 
 ---
 
@@ -288,5 +296,3 @@ void loop() {
 ```
 
 ---
-
-End of document.
