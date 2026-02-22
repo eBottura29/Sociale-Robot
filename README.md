@@ -95,12 +95,13 @@ Dit robotconcept kan ook ingezet worden voor:
 
 ### Navigatie & Sensoren
 - **2x Sonar Sensors** gemonteerd op 180Â° servo
-  - Meten afstand tot objecten
-  - Data wordt naar laptop gestuurd voor navigatiebeslissingen
+  - Meten afstand links/midden/rechts via sweep (20-90-160 graden)
+  - Firmware houdt continue sonar-scan bij en stuurt telemetrie naar laptop
   
 - **Tank Rups Systeem** (4 wielen met loopbanden)
   - Bestuurd door 2x 360Â° continue servos (een per kant)
-  - Navigeert naar locaties bepaald door laptop
+  - Ondersteunt tank-drive functies: vooruit, achteruit, links draaien, rechts draaien
+  - Navigatie logica (AVOID/APPROACH/SEARCH) draait op robot, `MOVE:<left>,<right>` kan dit overriden
 
 ### Extra Features
 - **RGB LED** - Debugging of visuele effecten
@@ -117,11 +118,12 @@ Dit robotconcept kan ook ingezet worden voor:
    - Emotie AI analyseert conversatie
    - Stuurt commando's naar robot via serieel
 3. **Robot**: 
-   - Ontvangt emotie-data en bewegingscommando's
-   - Update LED matrices (emoties)
-   - Toont antwoord op LCD
-   - Sonar data â†’ terug naar laptop
-4. **Laptop**: Verwerkt sonar data voor navigatiebeslissingen
+    - Ontvangt emotie-data en bewegingscommando's
+    - Update LED matrices (emoties)
+    - Toont antwoord op LCD
+    - Sonar servo scant omgeving en robot bepaalt lokale navigatie
+    - Sonar data â†’ terug naar laptop (telemetrie/debug)
+4. **Laptop**: Kan nog steeds `MOVE:<left>,<right>` commando's sturen voor directe controle
 
 ---
 
@@ -196,7 +198,7 @@ Mogelijke gratis LLM's via HuggingFace:
 
 #### 4. Navigatie Logica
 ```python
-# Implementatie (desktop app)
+# Implementatie (zelfde drempels in firmware en desktop)
 # - Bij dichtbij object: ontwijken
 # - Bij object in bereik: benaderen met kleine stuurcorrectie
 # - Anders: willekeurige zoekbewegingen
@@ -219,7 +221,7 @@ else:
     # SEARCH
     choose random: forward / turn left / turn right
 ```
-Deze logica draait in de desktop app en stuurt `MOVE:<left>,<right>` commando's naar de robot.
+Deze logica draait nu ook in de robot-firmware (autonoom). De desktop app kan dezelfde logica blijven gebruiken en stuurt dan `MOVE:<left>,<right>` commando's die firmware-autonoom tijdelijk overriden.
 
 ### Robot Software (C++)
 
@@ -235,8 +237,8 @@ Deze logica draait in de desktop app en stuurt `MOVE:<left>,<right>` commando's 
 -  loop()
   - Lees seriele commando's
   - Update emotie displays
-  - Control beweging
-  - Lees sonar data
+  - Update sonar servo sweep (links/midden/rechts)
+  - Control beweging (STOP/CMD/MANUAL/AVOID/APPROACH/SEARCH)
   - Stuur data terug
 
 ```
@@ -456,19 +458,17 @@ Affection: Blijft dichterbij gebruiker
   - Of splits in meerdere "pagina's"
   - Of toon alleen key phrases
 
-### Voorgestelde Verbeteringen aan Huidige Plan
+### Geimplementeerde Navigatieverbetering
 
 **Sonar Servo Pattern**: 
 ```cpp
-// Scan pattern voor betere detectie
-servo.write(0);    // Links
-delay(200);
+// Niet-blokkerende scan voor betere detectie
+servo.write(20);   // Links
+// wacht kort op stabilisatie
 readSonar();
-servo.write(90);   // Midden  
-delay(200);
+servo.write(90);   // Midden
 readSonar();
-servo.write(180);  // Rechts
-delay(200);
+servo.write(160);  // Rechts
 readSonar();
 ```
 

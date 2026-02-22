@@ -46,19 +46,33 @@ static inline void compatSetRGBLed(int r, int g, int b) {
 // - PONG
 // - ACK:<command>
 // - ACK:RESET
-// - STAT:<sonarL>,<sonarR>,<closest>,<battery>,<mode>
+// - STAT:<sonarL>,<sonarR>,<closest>,<battery>,<mode>  mode=STOP/CMD/MANUAL/AVOID/APPROACH/SEARCH
 // - OUT:<r>,<g>,<b>,<buzzer>,<matrix>,<lcd>
 // - EMO:<h>,<fat>,<hun>,<sad>,<anx>,<aff>,<cur>,<fru>
 
+#define DRIVE_LEFT_PIN 40
+#define DRIVE_RIGHT_PIN 41
+#define SONAR_PAN_PIN 19
 #define ECHO_PIN_A0 A0
 #define ECHO_PIN_A2 A2
 #define TRIGGER_PIN_A1 A1
 #define TRIGGER_PIN_A3 A3
 #define MAX_DISTANCE 200
 #define MAX_VEL 50
+#define SONAR_FAR_CM (MAX_DISTANCE + 1)
 #define TELEMETRY_INTERVAL_MS 250
 #define CMD_TIMEOUT_MS 1000
 #define LCD_SCROLL_INTERVAL_MS 450
+#define SONAR_SCAN_SETTLE_MS 140
+#define NAV_AVOID_THRESHOLD_CM 20
+#define NAV_APPROACH_THRESHOLD_CM 60
+#define NAV_AVOID_SPEED 40
+#define NAV_APPROACH_SLOW 25
+#define NAV_APPROACH_FAST 45
+#define NAV_SEARCH_FORWARD_SPEED 35
+#define NAV_SEARCH_TURN_SPEED 30
+#define NAV_SEARCH_FORWARD_MS 1200
+#define NAV_SEARCH_TURN_MS 800
 
 const int EMO_COUNT = 8;
 const char *EMO_NAMES[EMO_COUNT] = {
@@ -80,8 +94,20 @@ int inputPos = 0;
 int cmdLeft = 0;
 int cmdRight = 0;
 bool cmdActive = false;
+bool stopLatch = false;
 unsigned long lastCmdMs = 0;
 unsigned long lastTelemetryMs = 0;
+const char *currentNavMode = "STOP";
+
+const int SONAR_SCAN_POINTS = 3;
+const int SONAR_SCAN_ANGLES[SONAR_SCAN_POINTS] = {20, 90, 160};  // left, center, right
+int sonarScanBySector[SONAR_SCAN_POINTS] = {SONAR_FAR_CM, SONAR_FAR_CM, SONAR_FAR_CM};
+int sonarScanIndex = 0;
+bool sonarPanWaiting = false;
+unsigned long sonarPanMovedAtMs = 0;
+unsigned long navSearchUntilMs = 0;
+int navSearchLeft = 0;
+int navSearchRight = 0;
 
 int currentEmo[EMO_COUNT] = {0};
 int currentRgb[3] = {0, 0, 0};
@@ -140,8 +166,23 @@ void updateLCD(String str) {
 
 /* ---- Continuous servo control ---- */
 
+int sonarForNavigation(int cm) {
+  return (cm > 0) ? cm : SONAR_FAR_CM;
+}
+
+int sonarForTelemetry(int cm) {
+  return (cm <= MAX_DISTANCE) ? cm : 0;
+}
+
+int readCombinedSonarCm() {
+  int readingA = sonarA1A0.ping_cm();
+  int readingB = sonarA3A2.ping_cm();
+  int a = sonarForNavigation(readingA);
+  int b = sonarForNavigation(readingB);
+  return (a < b) ? a : b;
+}
+
 void useContServo1(int vel) {
-  servo1.attach(40);
   servo1.writeMicroseconds(
     map(constrain(vel, -255, 255),
         -255, 255,
@@ -150,7 +191,6 @@ void useContServo1(int vel) {
 }
 
 void useContServo2(int vel) {
-  servo2.attach(41);
   servo2.writeMicroseconds(
     map(constrain(vel, -255, 255),
         -255, 255,
@@ -158,21 +198,117 @@ void useContServo2(int vel) {
   );
 }
 
-void rotateRobot(int vel) {
-  useContServo1(vel);
-  useContServo2(-vel);
+void setTrackSpeeds(int leftVel, int rightVel) {
+  useContServo1(leftVel);
+  useContServo2(rightVel);
+}
+
+void moveForward(int vel) {
+  int v = abs(constrain(vel, -255, 255));
+  setTrackSpeeds(v, v);
+}
+
+void moveBackward(int vel) {
+  int v = abs(constrain(vel, -255, 255));
+  setTrackSpeeds(-v, -v);
+}
+
+void rotateLeft(int vel) {
+  int v = abs(constrain(vel, -255, 255));
+  setTrackSpeeds(-v, v);
+}
+
+void rotateRight(int vel) {
+  int v = abs(constrain(vel, -255, 255));
+  setTrackSpeeds(v, -v);
 }
 
 void stopRobot() {
-  useContServo1(0);
-  useContServo2(0);
+  setTrackSpeeds(0, 0);
 }
 
 /* ---- Sonars ---- */
 
-void scanSonars(float readings[2]) {
-  readings[0] = sonarA1A0.ping_cm();
-  readings[1] = sonarA3A2.ping_cm();
+void refreshSonarSnapshot() {
+  int left = sonarForTelemetry(sonarScanBySector[0]);
+  int center = sonarForTelemetry(sonarScanBySector[1]);
+  int right = sonarForTelemetry(sonarScanBySector[2]);
+
+  sonar1 = left;
+  sonar2 = right;
+
+  int navLeft = sonarForNavigation(left);
+  int navCenter = sonarForNavigation(center);
+  int navRight = sonarForNavigation(right);
+  int nearest = min(navLeft, min(navCenter, navRight));
+  closest = (nearest > MAX_DISTANCE) ? 0 : nearest;
+}
+
+void updateSonarScan() {
+  if (!sonarPanWaiting) {
+    servo3.write(SONAR_SCAN_ANGLES[sonarScanIndex]);
+    sonarPanMovedAtMs = millis();
+    sonarPanWaiting = true;
+    return;
+  }
+
+  if (millis() - sonarPanMovedAtMs < SONAR_SCAN_SETTLE_MS) {
+    return;
+  }
+
+  sonarScanBySector[sonarScanIndex] = readCombinedSonarCm();
+  sonarScanIndex = (sonarScanIndex + 1) % SONAR_SCAN_POINTS;
+  sonarPanWaiting = false;
+  refreshSonarSnapshot();
+}
+
+void chooseSearchMotion() {
+  int choice = random(0, 3);
+  if (choice == 0) {
+    navSearchLeft = NAV_SEARCH_FORWARD_SPEED;
+    navSearchRight = NAV_SEARCH_FORWARD_SPEED;
+    navSearchUntilMs = millis() + NAV_SEARCH_FORWARD_MS;
+  } else if (choice == 1) {
+    navSearchLeft = -NAV_SEARCH_TURN_SPEED;
+    navSearchRight = NAV_SEARCH_TURN_SPEED;
+    navSearchUntilMs = millis() + NAV_SEARCH_TURN_MS;
+  } else {
+    navSearchLeft = NAV_SEARCH_TURN_SPEED;
+    navSearchRight = -NAV_SEARCH_TURN_SPEED;
+    navSearchUntilMs = millis() + NAV_SEARCH_TURN_MS;
+  }
+}
+
+void applyAutonomousNavigation() {
+  int left = sonarForNavigation(sonar1);
+  int right = sonarForNavigation(sonar2);
+  int nearest = min(left, right);
+
+  if (nearest <= NAV_AVOID_THRESHOLD_CM) {
+    if (left < right) {
+      setTrackSpeeds(-NAV_AVOID_SPEED, NAV_AVOID_SPEED);
+    } else {
+      setTrackSpeeds(NAV_AVOID_SPEED, -NAV_AVOID_SPEED);
+    }
+    currentNavMode = "AVOID";
+    return;
+  }
+
+  if (nearest <= NAV_APPROACH_THRESHOLD_CM) {
+    if (left < right) {
+      setTrackSpeeds(NAV_APPROACH_SLOW, NAV_APPROACH_FAST);
+    } else {
+      setTrackSpeeds(NAV_APPROACH_FAST, NAV_APPROACH_SLOW);
+    }
+    currentNavMode = "APPROACH";
+    return;
+  }
+
+  if (millis() >= navSearchUntilMs) {
+    chooseSearchMotion();
+  }
+  setTrackSpeeds(navSearchLeft, navSearchRight);
+  currentNavMode = "SEARCH";
 }
 
 void setMatrixPattern(const byte pattern[8]) {
@@ -189,6 +325,7 @@ void softResetState() {
   cmdLeft = 0;
   cmdRight = 0;
   cmdActive = false;
+  stopLatch = true;
   lastCmdMs = millis();
   lastTelemetryMs = 0;
   inputPos = 0;
@@ -197,6 +334,17 @@ void softResetState() {
   currentRgb[2] = 0;
   currentBuzzerOn = false;
   currentMatrixIndex = 0;
+  currentNavMode = "STOP";
+  navSearchUntilMs = 0;
+  navSearchLeft = 0;
+  navSearchRight = 0;
+  for (int i = 0; i < SONAR_SCAN_POINTS; i++) {
+    sonarScanBySector[i] = SONAR_FAR_CM;
+  }
+  sonarScanIndex = 0;
+  sonarPanWaiting = false;
+  servo3.write(SONAR_SCAN_ANGLES[1]);
+  refreshSonarSnapshot();
   for (int i = 0; i < EMO_COUNT; i++) {
     currentEmo[i] = 0;
   }
@@ -240,11 +388,7 @@ void applyEmotionOutputs() {
 }
 
 void sendTelemetry() {
-  float sonar_readings[2];
-  scanSonars(sonar_readings);
-  sonar1 = (int)sonar_readings[0];
-  sonar2 = (int)sonar_readings[1];
-  closest = (sonar1 < sonar2) ? sonar1 : sonar2;
+  refreshSonarSnapshot();
 
   Serial.print(F("STAT:"));
   Serial.print(sonar1);
@@ -255,7 +399,7 @@ void sendTelemetry() {
   Serial.print(F(","));
   Serial.print(0);
   Serial.print(F(","));
-  Serial.print(F("AUTO"));
+  Serial.print(currentNavMode);
   Serial.println();
 
   Serial.print(F("OUT:"));
@@ -296,7 +440,9 @@ void handleLine(String line) {
   }
   if (line == "STOP") {
     cmdActive = false;
+    stopLatch = true;
     stopRobot();
+    currentNavMode = "STOP";
     Serial.println(F("ACK:STOP"));
     return;
   }
@@ -310,9 +456,10 @@ void handleLine(String line) {
     if (commaIndex > 0) {
       int leftVal = line.substring(5, commaIndex).toInt();
       int rightVal = line.substring(commaIndex + 1).toInt();
-      cmdLeft = leftVal;
-      cmdRight = rightVal;
+      cmdLeft = constrain(leftVal, -255, 255);
+      cmdRight = constrain(rightVal, -255, 255);
       cmdActive = true;
+      stopLatch = false;
       lastCmdMs = millis();
       Serial.println(F("ACK:MOVE"));
     }
@@ -376,6 +523,14 @@ void setup() {
   pinMode(SW_C, INPUT_PULLUP);
 
   Serial.begin(9600);
+  randomSeed(analogRead(A4));
+
+  servo1.attach(DRIVE_LEFT_PIN);
+  servo2.attach(DRIVE_RIGHT_PIN);
+  servo3.attach(SONAR_PAN_PIN);
+  servo3.write(SONAR_SCAN_ANGLES[1]);
+  stopRobot();
+  refreshSonarSnapshot();
 
   updateLCD(" ");
   compatClearLedMatrix();
@@ -384,18 +539,24 @@ void setup() {
 
 void loop() {
   readSerial();
+  updateSonarScan();
 
-  if (cmdActive && millis() - lastCmdMs < CMD_TIMEOUT_MS) {
-    useContServo1(cmdLeft);
-    useContServo2(cmdRight);
+  if (stopLatch) {
+    stopRobot();
+    currentNavMode = "STOP";
+  } else if (cmdActive && millis() - lastCmdMs < CMD_TIMEOUT_MS) {
+    setTrackSpeeds(cmdLeft, cmdRight);
+    currentNavMode = "CMD";
   } else {
     cmdActive = false;
     if (!digitalRead(SW_W)) {
-      rotateRobot(MAX_VEL);
+      rotateLeft(MAX_VEL);
+      currentNavMode = "MANUAL";
     } else if (!digitalRead(SW_E)) {
-      rotateRobot(-MAX_VEL);
+      rotateRight(MAX_VEL);
+      currentNavMode = "MANUAL";
     } else {
-      stopRobot();
+      applyAutonomousNavigation();
     }
   }
 
