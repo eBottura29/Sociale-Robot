@@ -56,8 +56,8 @@ void setTrackServoSpeed(Servo &servo, int vel, bool invertDirection = false) {
 }
 
 void stopTracks() {
-  setTrackServoSpeed(leftTrackServo, 0, true);
-  setTrackServoSpeed(rightTrackServo, 0);
+  setTrackServoSpeed(leftTrackServo, 0);
+  setTrackServoSpeed(rightTrackServo, 0, true);
 }
 
 void lcdShow(const char *line1, const char *line2) {
@@ -400,8 +400,8 @@ void runHardwareSuite() {
   sonarPanServo.write(SONAR_PAN_CENTER_DEG);
 
   testLcd();
-  testDriveServo("Left track", leftTrackServo, true);
-  testDriveServo("Right track", rightTrackServo);
+  testDriveServo("Left track", leftTrackServo);
+  testDriveServo("Right track", rightTrackServo, true);
   testSonarPanServo();
   testSonars();
   testLedMatrixScreens();
