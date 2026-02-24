@@ -4,9 +4,9 @@
 #include <NewPing.h>
 #include <Servo.h>
 
-// -----------------------------
-// Hardware mapping for this robot
-// -----------------------------
+// ----------------
+// Hardware mapping
+// ----------------
 #define LEFT_TRACK_SERVO_PIN 40
 #define RIGHT_TRACK_SERVO_PIN 41
 #define SONAR_PAN_SERVO_PIN 19
