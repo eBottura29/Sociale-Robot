@@ -51,8 +51,8 @@ static inline void compatSetRGBLed(int r, int g, int b) {
 // - OUT:<r>,<g>,<b>,<buzzer>,<matrix>,<lcd>
 // - EMO:<h>,<fat>,<hun>,<sad>,<anx>,<aff>,<cur>,<fru>
 
-#define DRIVE_LEFT_PIN 40
-#define DRIVE_RIGHT_PIN 41
+#define DRIVE_LEFT_PIN 41
+#define DRIVE_RIGHT_PIN 40
 #define SONAR_PAN_PIN 19
 #define ECHO_PIN_A0 A0
 #define ECHO_PIN_A2 A2
@@ -143,8 +143,8 @@ int sonar1;
 int sonar2;
 int closest;
 
-Servo servo1;  // pin 40: cont. servo
-Servo servo2;  // pin 41: cont. servo
+Servo servo1;  // pin 41: cont. servo (left)
+Servo servo2;  // pin 40: cont. servo (right)
 Servo servo3;  // pin 19: 180° servo
 
 void updateLCD(String str) {
@@ -201,7 +201,7 @@ void useContServo2(int vel) {
   servo2.writeMicroseconds(
     map(constrain(vel, -255, 255),
         -255, 255,
-        2000, 1000)
+        1000, 2000)
   );
 }
 

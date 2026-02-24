@@ -7,8 +7,8 @@
 // ----------------
 // Hardware mapping
 // ----------------
-#define LEFT_TRACK_SERVO_PIN 40
-#define RIGHT_TRACK_SERVO_PIN 41
+#define LEFT_TRACK_SERVO_PIN 41
+#define RIGHT_TRACK_SERVO_PIN 40
 #define SONAR_PAN_SERVO_PIN 19
 
 #define SONAR_1_TRIG_PIN A1
@@ -57,7 +57,7 @@ void setTrackServoSpeed(Servo &servo, int vel, bool invertDirection = false) {
 
 void stopTracks() {
   setTrackServoSpeed(leftTrackServo, 0, true);
-  setTrackServoSpeed(rightTrackServo, 0, true);
+  setTrackServoSpeed(rightTrackServo, 0);
 }
 
 void lcdShow(const char *line1, const char *line2) {
@@ -401,7 +401,7 @@ void runHardwareSuite() {
 
   testLcd();
   testDriveServo("Left track", leftTrackServo, true);
-  testDriveServo("Right track", rightTrackServo, true);
+  testDriveServo("Right track", rightTrackServo);
   testSonarPanServo();
   testSonars();
   testLedMatrixScreens();
