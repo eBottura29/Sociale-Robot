@@ -35,6 +35,6 @@ void loop()
     ccw_input = digitalRead(BUTTON_PIN_SW_W) - 1;
     speed = (cw_input + ccw_input) * max_speed;
     servoOnPin40.attach(40);
-    servoOnPin40.writeMicroseconds(map(constrain(speed, -255, 255), -255, 255, 1500 - 500, 1500 + 500));
+    servoOnPin40.writeMicroseconds(map(constrain(speed, -255, 255), -255, 255, 1500 + 500, 1500 - 500));
 
 }

@@ -37,6 +37,7 @@ static inline void compatSetRGBLed(int r, int g, int b) {
 // - PING
 // - STOP
 // - RESET                              software reset (state reset)
+// - SONAR:ON / SONAR:OFF               sonar sensors + pan servo enable/disable
 // - MOVE:<left>,<right>                 left/right = -255..255
 // - LCD:<text>                          tekst op LCD
 // - EMO:<h>,<fat>,<hun>,<sad>,<anx>,<aff>,<cur>,<fru>   0..100
@@ -46,7 +47,7 @@ static inline void compatSetRGBLed(int r, int g, int b) {
 // - PONG
 // - ACK:<command>
 // - ACK:RESET
-// - STAT:<sonarL>,<sonarR>,<closest>,<battery>,<mode>  mode=STOP/CMD/MANUAL/AVOID/APPROACH/SEARCH
+// - STAT:<sonarL>,<sonarR>,<closest>,<battery>,<mode>  mode=STOP/CMD/MANUAL/AVOID/APPROACH/SEARCH/SONAR_OFF
 // - OUT:<r>,<g>,<b>,<buzzer>,<matrix>,<lcd>
 // - EMO:<h>,<fat>,<hun>,<sad>,<anx>,<aff>,<cur>,<fru>
 
@@ -64,6 +65,8 @@ static inline void compatSetRGBLed(int r, int g, int b) {
 #define CMD_TIMEOUT_MS 1000
 #define LCD_SCROLL_INTERVAL_MS 450
 #define SONAR_SCAN_SETTLE_MS 140
+#define SONAR_PAN_STEP_DEG 2
+#define SONAR_PAN_STEP_INTERVAL_MS 20
 #define NAV_AVOID_THRESHOLD_CM 20
 #define NAV_APPROACH_THRESHOLD_CM 60
 #define NAV_AVOID_SPEED 40
@@ -103,8 +106,12 @@ const int SONAR_SCAN_POINTS = 3;
 const int SONAR_SCAN_ANGLES[SONAR_SCAN_POINTS] = {20, 90, 160};  // left, center, right
 int sonarScanBySector[SONAR_SCAN_POINTS] = {SONAR_FAR_CM, SONAR_FAR_CM, SONAR_FAR_CM};
 int sonarScanIndex = 0;
+bool sonarEnabled = true;
 bool sonarPanWaiting = false;
 unsigned long sonarPanMovedAtMs = 0;
+unsigned long sonarPanLastStepMs = 0;
+int sonarPanCurrentAngle = SONAR_SCAN_ANGLES[1];
+int sonarPanTargetAngle = SONAR_SCAN_ANGLES[1];
 unsigned long navSearchUntilMs = 0;
 int navSearchLeft = 0;
 int navSearchRight = 0;
@@ -186,7 +193,7 @@ void useContServo1(int vel) {
   servo1.writeMicroseconds(
     map(constrain(vel, -255, 255),
         -255, 255,
-        1000, 2000)
+        2000, 1000)
   );
 }
 
@@ -194,7 +201,7 @@ void useContServo2(int vel) {
   servo2.writeMicroseconds(
     map(constrain(vel, -255, 255),
         -255, 255,
-        1000, 2000)
+        2000, 1000)
   );
 }
 
@@ -244,11 +251,68 @@ void refreshSonarSnapshot() {
   closest = (nearest > MAX_DISTANCE) ? 0 : nearest;
 }
 
+void setSonarEnabled(bool enabled) {
+  sonarEnabled = enabled;
+  if (!sonarEnabled) {
+    sonarPanWaiting = false;
+    sonarPanLastStepMs = 0;
+    sonarPanCurrentAngle = SONAR_SCAN_ANGLES[1];
+    sonarPanTargetAngle = SONAR_SCAN_ANGLES[1];
+    if (servo3.attached()) {
+      servo3.write(SONAR_SCAN_ANGLES[1]);
+      delay(120);
+      servo3.detach();
+    }
+    for (int i = 0; i < SONAR_SCAN_POINTS; i++) {
+      sonarScanBySector[i] = SONAR_FAR_CM;
+    }
+    refreshSonarSnapshot();
+    return;
+  }
+
+  if (!servo3.attached()) {
+    servo3.attach(SONAR_PAN_PIN);
+  }
+  sonarPanWaiting = false;
+  sonarPanLastStepMs = 0;
+  sonarPanCurrentAngle = SONAR_SCAN_ANGLES[1];
+  sonarPanTargetAngle = SONAR_SCAN_ANGLES[1];
+  servo3.write(SONAR_SCAN_ANGLES[1]);
+  for (int i = 0; i < SONAR_SCAN_POINTS; i++) {
+    sonarScanBySector[i] = SONAR_FAR_CM;
+  }
+  refreshSonarSnapshot();
+}
+
 void updateSonarScan() {
+  if (!sonarEnabled) {
+    return;
+  }
   if (!sonarPanWaiting) {
-    servo3.write(SONAR_SCAN_ANGLES[sonarScanIndex]);
-    sonarPanMovedAtMs = millis();
+    sonarPanTargetAngle = SONAR_SCAN_ANGLES[sonarScanIndex];
+    if (sonarPanCurrentAngle == sonarPanTargetAngle) {
+      sonarPanMovedAtMs = millis();
+    }
+    sonarPanLastStepMs = 0;
     sonarPanWaiting = true;
+    return;
+  }
+
+  if (sonarPanCurrentAngle != sonarPanTargetAngle) {
+    unsigned long now = millis();
+    if (sonarPanLastStepMs == 0 || now - sonarPanLastStepMs >= SONAR_PAN_STEP_INTERVAL_MS) {
+      int remaining = sonarPanTargetAngle - sonarPanCurrentAngle;
+      if (abs(remaining) <= SONAR_PAN_STEP_DEG) {
+        sonarPanCurrentAngle = sonarPanTargetAngle;
+      } else if (remaining > 0) {
+        sonarPanCurrentAngle += SONAR_PAN_STEP_DEG;
+      } else {
+        sonarPanCurrentAngle -= SONAR_PAN_STEP_DEG;
+      }
+      servo3.write(sonarPanCurrentAngle);
+      sonarPanLastStepMs = now;
+      sonarPanMovedAtMs = now;
+    }
     return;
   }
 
@@ -342,8 +406,7 @@ void softResetState() {
     sonarScanBySector[i] = SONAR_FAR_CM;
   }
   sonarScanIndex = 0;
-  sonarPanWaiting = false;
-  servo3.write(SONAR_SCAN_ANGLES[1]);
+  setSonarEnabled(true);
   refreshSonarSnapshot();
   for (int i = 0; i < EMO_COUNT; i++) {
     currentEmo[i] = 0;
@@ -451,6 +514,16 @@ void handleLine(String line) {
     Serial.println(F("ACK:RESET"));
     return;
   }
+  if (line == "SONAR:ON") {
+    setSonarEnabled(true);
+    Serial.println(F("ACK:SONAR:ON"));
+    return;
+  }
+  if (line == "SONAR:OFF") {
+    setSonarEnabled(false);
+    Serial.println(F("ACK:SONAR:OFF"));
+    return;
+  }
   if (line.startsWith("MOVE:")) {
     int commaIndex = line.indexOf(',', 5);
     if (commaIndex > 0) {
@@ -528,7 +601,7 @@ void setup() {
   servo1.attach(DRIVE_LEFT_PIN);
   servo2.attach(DRIVE_RIGHT_PIN);
   servo3.attach(SONAR_PAN_PIN);
-  servo3.write(SONAR_SCAN_ANGLES[1]);
+  setSonarEnabled(true);
   stopRobot();
   refreshSonarSnapshot();
 
@@ -539,7 +612,9 @@ void setup() {
 
 void loop() {
   readSerial();
-  updateSonarScan();
+  if (sonarEnabled) {
+    updateSonarScan();
+  }
 
   if (stopLatch) {
     stopRobot();
@@ -555,6 +630,9 @@ void loop() {
     } else if (!digitalRead(SW_E)) {
       rotateRight(MAX_VEL);
       currentNavMode = "MANUAL";
+    } else if (!sonarEnabled) {
+      stopRobot();
+      currentNavMode = "SONAR_OFF";
     } else {
       applyAutonomousNavigation();
     }

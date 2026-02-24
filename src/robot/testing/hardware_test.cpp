@@ -48,14 +48,16 @@ SuiteStats suiteStats = {0, 0, 0};
 unsigned long lastIdleBlinkMs = 0;
 bool idleLedOn = false;
 
-void setTrackServoSpeed(Servo &servo, int vel) {
-  int pulse = map(constrain(vel, -255, 255), -255, 255, 1000, 2000);
+void setTrackServoSpeed(Servo &servo, int vel, bool invertDirection = false) {
+  int pulse = invertDirection
+    ? map(constrain(vel, -255, 255), -255, 255, 2000, 1000)
+    : map(constrain(vel, -255, 255), -255, 255, 1000, 2000);
   servo.writeMicroseconds(pulse);
 }
 
 void stopTracks() {
-  setTrackServoSpeed(leftTrackServo, 0);
-  setTrackServoSpeed(rightTrackServo, 0);
+  setTrackServoSpeed(leftTrackServo, 0, true);
+  setTrackServoSpeed(rightTrackServo, 0, true);
 }
 
 void lcdShow(const char *line1, const char *line2) {
@@ -126,17 +128,17 @@ void testLcd() {
   reportPass("LCD");
 }
 
-void testDriveServo(const char *label, Servo &servo) {
+void testDriveServo(const char *label, Servo &servo, bool invertDirection = false) {
   lcdShow("Servo test", label);
   Serial.print(F("[INFO] "));
   Serial.print(label);
   Serial.println(F(": +1s then -1s"));
 
-  setTrackServoSpeed(servo, SERVO_TEST_SPEED);
+  setTrackServoSpeed(servo, SERVO_TEST_SPEED, invertDirection);
   delay(SERVO_TEST_MS);
-  setTrackServoSpeed(servo, -SERVO_TEST_SPEED);
+  setTrackServoSpeed(servo, -SERVO_TEST_SPEED, invertDirection);
   delay(SERVO_TEST_MS);
-  setTrackServoSpeed(servo, 0);
+  setTrackServoSpeed(servo, 0, invertDirection);
   delay(300);
 
   reportPass(label);
@@ -398,8 +400,8 @@ void runHardwareSuite() {
   sonarPanServo.write(SONAR_PAN_CENTER_DEG);
 
   testLcd();
-  testDriveServo("Left track", leftTrackServo);
-  testDriveServo("Right track", rightTrackServo);
+  testDriveServo("Left track", leftTrackServo, true);
+  testDriveServo("Right track", rightTrackServo, true);
   testSonarPanServo();
   testSonars();
   testLedMatrixScreens();
