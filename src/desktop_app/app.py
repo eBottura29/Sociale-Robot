@@ -40,6 +40,7 @@ class NierDesktopApp:
         self.logger.log("APP_START", "Desktop app gestart")
 
         self.navigation_enabled = False
+        self.sonar_enabled = True
         self.nav_until = 0.0
         self.nav_left = 0
         self.nav_right = 0
@@ -206,6 +207,15 @@ class NierDesktopApp:
         )
         self.motion_switch.grid(row=3, column=0, columnspan=3, sticky="w", pady=(8, 0))
 
+        self.sonar_enabled_var = tk.BooleanVar(value=True)
+        self.sonar_switch = ttk.Checkbutton(
+            connection,
+            text="Sonar toestaan",
+            variable=self.sonar_enabled_var,
+            command=self._on_sonar_toggle,
+        )
+        self.sonar_switch.grid(row=4, column=0, columnspan=3, sticky="w", pady=(4, 0))
+
         llm_frame = ttk.Labelframe(status_frame, text="LLM status", style="Section.TLabelframe")
         llm_frame.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         llm_frame.columnconfigure(1, weight=1)
@@ -246,9 +256,10 @@ class NierDesktopApp:
         self._telemetry_row(telemetry, 3, "Navigatie Modus", "Offline")
         self._telemetry_row(telemetry, 4, "Laatste Commando", "-")
         self._telemetry_row(telemetry, 5, "RGB Status", "-")
+        self._telemetry_row(telemetry, 6, "Sonar Status", "AAN")
 
         battery_frame = ttk.Frame(telemetry)
-        battery_frame.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        battery_frame.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         battery_frame.columnconfigure(1, weight=1)
         ttk.Label(battery_frame, text="Batterij").grid(row=0, column=0, sticky="w")
         self.battery_bar = ttk.Progressbar(battery_frame, maximum=100, value=0)
@@ -467,6 +478,8 @@ class NierDesktopApp:
 
         self._reset_stats()
         self._send_line("HELLO")
+        self._send_line("SONAR:ON" if self.sonar_enabled else "SONAR:OFF")
+        self._set_telemetry("Sonar Status", "AAN" if self.sonar_enabled else "UIT")
         if not self.navigation_enabled:
             self._send_line("STOP")
             self._set_telemetry("Navigatie Modus", "AUTO (OFF)")
@@ -529,6 +542,8 @@ class NierDesktopApp:
     def _update_navigation(self, sonar_left: int, sonar_right: int) -> None:
         if not self.navigation_enabled:
             return
+        if not self.sonar_enabled:
+            return
         if not self.connected or not self.serial.serial_port:
             return
         left = sonar_left if sonar_left > 0 else 999
@@ -570,6 +585,10 @@ class NierDesktopApp:
     def _on_motion_toggle(self) -> None:
         self.navigation_enabled = bool(self.motion_enabled_var.get())
         if self.navigation_enabled:
+            if not self.sonar_enabled:
+                self._set_telemetry("Navigatie Modus", "AUTO (ON) - SONAR UIT")
+                self.logger.log("NAV", "Navigatie ingeschakeld (sonar uit)")
+                return
             self._set_telemetry("Navigatie Modus", "AUTO (ON)")
             self.logger.log("NAV", "Navigatie ingeschakeld")
             return
@@ -578,6 +597,32 @@ class NierDesktopApp:
         self._set_telemetry("Navigatie Modus", "AUTO (OFF)")
         self._set_telemetry("Laatste Commando", "STOP")
         self.logger.log("NAV", "Navigatie uitgeschakeld")
+
+    def _on_sonar_toggle(self) -> None:
+        self.sonar_enabled = bool(self.sonar_enabled_var.get())
+        status = "AAN" if self.sonar_enabled else "UIT"
+        self._set_telemetry("Sonar Status", status)
+
+        if self.connected and self.serial.serial_port:
+            cmd = "SONAR:ON" if self.sonar_enabled else "SONAR:OFF"
+            self._send_line(cmd)
+            self.logger.log("TX", cmd)
+            if not self.sonar_enabled and self.navigation_enabled:
+                self._send_line("STOP")
+                self._set_telemetry("Laatste Commando", "STOP")
+
+        if not self.sonar_enabled:
+            self._set_telemetry("Sonar Links", "0 cm")
+            self._set_telemetry("Sonar Rechts", "0 cm")
+            self._set_telemetry("Dichtste Afstand", "0 cm")
+            if self.navigation_enabled:
+                self._set_telemetry("Navigatie Modus", "AUTO (ON) - SONAR UIT")
+            self.logger.log("SONAR", "Sonar uitgeschakeld")
+            return
+
+        if self.navigation_enabled:
+            self._set_telemetry("Navigatie Modus", "AUTO (ON)")
+        self.logger.log("SONAR", "Sonar ingeschakeld")
 
 
     def _poll_serial(self) -> None:
@@ -608,7 +653,10 @@ class NierDesktopApp:
         self.logger.log("RX", line)
 
         if line == "READY":
-            mode = "Online" if self.navigation_enabled else "AUTO (OFF)"
+            if self.navigation_enabled and not self.sonar_enabled:
+                mode = "AUTO (ON) - SONAR UIT"
+            else:
+                mode = "Online" if self.navigation_enabled else "AUTO (OFF)"
             self._set_telemetry("Navigatie Modus", mode)
             return
 
@@ -624,11 +672,19 @@ class NierDesktopApp:
                 sonar_left = self._safe_int(parts[0])
                 sonar_right = self._safe_int(parts[1])
                 closest = self._safe_int(parts[2])
-                self._set_telemetry("Sonar Links", f"{sonar_left} cm")
-                self._set_telemetry("Sonar Rechts", f"{sonar_right} cm")
-                self._set_telemetry("Dichtste Afstand", f"{closest} cm")
+                if self.sonar_enabled:
+                    self._set_telemetry("Sonar Links", f"{sonar_left} cm")
+                    self._set_telemetry("Sonar Rechts", f"{sonar_right} cm")
+                    self._set_telemetry("Dichtste Afstand", f"{closest} cm")
+                else:
+                    self._set_telemetry("Sonar Links", "0 cm")
+                    self._set_telemetry("Sonar Rechts", "0 cm")
+                    self._set_telemetry("Dichtste Afstand", "0 cm")
                 self.battery_bar.configure(value=self._safe_int(parts[3]))
-                nav_mode = parts[4] if self.navigation_enabled else "AUTO (OFF)"
+                if self.navigation_enabled and not self.sonar_enabled:
+                    nav_mode = "AUTO (ON) - SONAR UIT"
+                else:
+                    nav_mode = parts[4] if self.navigation_enabled else "AUTO (OFF)"
                 self._set_telemetry("Navigatie Modus", nav_mode)
                 self._update_navigation(sonar_left, sonar_right)
 
@@ -737,7 +793,9 @@ class NierDesktopApp:
         self._set_telemetry("Navigatie Modus", "Offline")
         self._set_telemetry("Laatste Commando", "-")
         self._set_telemetry("RGB Status", "-")
+        self._set_telemetry("Sonar Status", "AAN" if self.sonar_enabled_var.get() else "UIT")
         self.navigation_enabled = bool(self.motion_enabled_var.get())
+        self.sonar_enabled = bool(self.sonar_enabled_var.get())
 
         self.battery_bar.configure(value=0)
         self.response_label.configure(text="...")
