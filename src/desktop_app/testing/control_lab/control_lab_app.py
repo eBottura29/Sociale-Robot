@@ -11,7 +11,7 @@ APP_ROOT = Path(__file__).resolve().parents[2]
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
-from config import EMOTIONS
+from config import CONTROL_LAB_DEFAULTS, EMOTIONS
 from serial_client import SerialManager
 
 
@@ -19,8 +19,12 @@ class ControlLabApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("NIER Control Lab")
-        self.root.geometry("1220x840")
-        self.root.minsize(1080, 760)
+        width = int(CONTROL_LAB_DEFAULTS.get("window_width", 1220))
+        height = int(CONTROL_LAB_DEFAULTS.get("window_height", 840))
+        min_width = int(CONTROL_LAB_DEFAULTS.get("window_min_width", 1080))
+        min_height = int(CONTROL_LAB_DEFAULTS.get("window_min_height", 760))
+        self.root.geometry(f"{width}x{height}")
+        self.root.minsize(min_width, min_height)
 
         self.serial = SerialManager(debug_cb=self._on_tx)
         self.connected = False
@@ -32,16 +36,16 @@ class ControlLabApp:
         self.pan_auto = tk.BooleanVar(value=True)
         self.buzzer_enabled = tk.BooleanVar(value=False)
 
-        self.speed_var = tk.IntVar(value=80)
-        self.pan_angle_var = tk.IntVar(value=90)
+        self.speed_var = tk.IntVar(value=int(CONTROL_LAB_DEFAULTS.get("default_drive_speed", 80)))
+        self.pan_angle_var = tk.IntVar(value=int(CONTROL_LAB_DEFAULTS.get("default_pan_angle", 90)))
         self.emo_name_var = tk.StringVar(value=EMOTIONS[0])
-        self.emo_intensity_var = tk.IntVar(value=70)
-        self.left_brow_var = tk.IntVar(value=90)
-        self.right_brow_var = tk.IntVar(value=90)
-        self.rgb_r_var = tk.IntVar(value=0)
-        self.rgb_g_var = tk.IntVar(value=0)
-        self.rgb_b_var = tk.IntVar(value=0)
-        self.buzzer_pitch_var = tk.IntVar(value=880)
+        self.emo_intensity_var = tk.IntVar(value=int(CONTROL_LAB_DEFAULTS.get("default_emotion_intensity", 70)))
+        self.left_brow_var = tk.IntVar(value=int(CONTROL_LAB_DEFAULTS.get("default_brow_left", 90)))
+        self.right_brow_var = tk.IntVar(value=int(CONTROL_LAB_DEFAULTS.get("default_brow_right", 90)))
+        self.rgb_r_var = tk.IntVar(value=int(CONTROL_LAB_DEFAULTS.get("default_rgb_r", 0)))
+        self.rgb_g_var = tk.IntVar(value=int(CONTROL_LAB_DEFAULTS.get("default_rgb_g", 0)))
+        self.rgb_b_var = tk.IntVar(value=int(CONTROL_LAB_DEFAULTS.get("default_rgb_b", 0)))
+        self.buzzer_pitch_var = tk.IntVar(value=int(CONTROL_LAB_DEFAULTS.get("default_buzzer_pitch", 880)))
         self.lcd_var = tk.StringVar(value="")
         self.port_var = tk.StringVar(value="")
 

@@ -58,6 +58,7 @@ static inline void compatSetRGBLed(int r, int g, int b) {
 // - BROW:<leftAngle>,<rightAngle>
 // - EMO:<h>,<fat>,<hun>,<sad>,<anx>,<aff>,<cur>,<fru>
 
+// Keep these in sync with src/settings/settings.json (robot.pins / robot.* defaults).
 #define DRIVE_LEFT_PIN 41
 #define DRIVE_RIGHT_PIN 40
 #define SONAR_PAN_PIN 19
