@@ -166,6 +166,8 @@ class NierDesktopApp:
         self._debug_row(self.debug_frame, 5, "LED matrix")
         self._debug_row(self.debug_frame, 6, "Laatste TX")
         self._debug_row(self.debug_frame, 7, "Laatste RX")
+        self._debug_row(self.debug_frame, 8, "Wenkbrauw Links")
+        self._debug_row(self.debug_frame, 9, "Wenkbrauw Rechts")
 
         self.debug_frame.grid_remove()
 
@@ -257,9 +259,11 @@ class NierDesktopApp:
         self._telemetry_row(telemetry, 4, "Laatste Commando", "-")
         self._telemetry_row(telemetry, 5, "RGB Status", "-")
         self._telemetry_row(telemetry, 6, "Sonar Status", "AAN")
+        self._telemetry_row(telemetry, 7, "Wenkbrauw Links", "90°")
+        self._telemetry_row(telemetry, 8, "Wenkbrauw Rechts", "90°")
 
         battery_frame = ttk.Frame(telemetry)
-        battery_frame.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        battery_frame.grid(row=9, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         battery_frame.columnconfigure(1, weight=1)
         ttk.Label(battery_frame, text="Batterij").grid(row=0, column=0, sticky="w")
         self.battery_bar = ttk.Progressbar(battery_frame, maximum=100, value=0)
@@ -709,6 +713,18 @@ class NierDesktopApp:
                 self._set_telemetry("RGB Status", rgb)
                 
             return
+
+        if line.startswith("BROW:"):
+            payload = line[5:]
+            parts = payload.split(",")
+            if len(parts) >= 2:
+                left = self._safe_int(parts[0])
+                right = self._safe_int(parts[1])
+                self._set_telemetry("Wenkbrauw Links", f"{left}°")
+                self._set_telemetry("Wenkbrauw Rechts", f"{right}°")
+                self._set_debug("Wenkbrauw Links", f"{left}°")
+                self._set_debug("Wenkbrauw Rechts", f"{right}°")
+            return
         
         if line.startswith("EMO:"):
             payload = line[4:]
@@ -794,6 +810,8 @@ class NierDesktopApp:
         self._set_telemetry("Laatste Commando", "-")
         self._set_telemetry("RGB Status", "-")
         self._set_telemetry("Sonar Status", "AAN" if self.sonar_enabled_var.get() else "UIT")
+        self._set_telemetry("Wenkbrauw Links", "90°")
+        self._set_telemetry("Wenkbrauw Rechts", "90°")
         self.navigation_enabled = bool(self.motion_enabled_var.get())
         self.sonar_enabled = bool(self.sonar_enabled_var.get())
 
@@ -809,6 +827,8 @@ class NierDesktopApp:
         self._set_debug("LED matrix", "-")
         self._set_debug("Laatste TX", "-")
         self._set_debug("Laatste RX", "-")
+        self._set_debug("Wenkbrauw Links", "-")
+        self._set_debug("Wenkbrauw Rechts", "-")
 
         if self.lcd_scroll_after_id:
             self.root.after_cancel(self.lcd_scroll_after_id)

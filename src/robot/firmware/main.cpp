@@ -49,11 +49,14 @@ static inline void compatSetRGBLed(int r, int g, int b) {
 // - ACK:RESET
 // - STAT:<sonarL>,<sonarR>,<closest>,<battery>,<mode>  mode=STOP/CMD/MANUAL/AVOID/APPROACH/SEARCH/SONAR_OFF
 // - OUT:<r>,<g>,<b>,<buzzer>,<matrix>,<lcd>
+// - BROW:<leftAngle>,<rightAngle>
 // - EMO:<h>,<fat>,<hun>,<sad>,<anx>,<aff>,<cur>,<fru>
 
 #define DRIVE_LEFT_PIN 41
 #define DRIVE_RIGHT_PIN 40
 #define SONAR_PAN_PIN 19
+#define EYEBROW_LEFT_PIN 18
+#define EYEBROW_RIGHT_PIN 17
 #define ECHO_PIN_A0 A0
 #define ECHO_PIN_A2 A2
 #define TRIGGER_PIN_A1 A1
@@ -124,6 +127,8 @@ char currentLcdText[LCD_TEXT_MAX + 1] = " ";
 unsigned long lastLcdScrollMs = 0;
 int lcdScrollIndex = 0;
 int lcdScrollLength = 0;
+int eyebrowLeftAngle = 90;
+int eyebrowRightAngle = 90;
 
 const byte MATRIX_PATTERNS[EMO_COUNT][8] = {
   {0b00000000, 0b01000010, 0b10100101, 0b10000001, 0b10100101, 0b10011001, 0b01000010, 0b00111100}, // HAPPINESS
@@ -134,6 +139,16 @@ const byte MATRIX_PATTERNS[EMO_COUNT][8] = {
   {0b00000000, 0b01000010, 0b10100101, 0b10011001, 0b10011001, 0b10100101, 0b01000010, 0b00111100}, // AFFECTION
   {0b00011000, 0b00100100, 0b01000010, 0b10100101, 0b10000001, 0b01000010, 0b00100100, 0b00011000}, // CURIOSITY
   {0b11111111, 0b10000001, 0b10111101, 0b10100101, 0b10100101, 0b10111101, 0b10000001, 0b11111111}  // FRUSTRATION
+};
+const int EYEBROW_ANGLES[EMO_COUNT][2] = {
+  {120, 60},   // HAPPINESS
+  {75, 105},   // FATIGUE
+  {85, 95},    // HUNGER
+  {65, 115},   // SADNESS
+  {140, 40},   // ANXIETY
+  {110, 70},   // AFFECTION
+  {130, 50},   // CURIOSITY
+  {45, 135}    // FRUSTRATION
 };
 
 NewPing sonarA1A0(TRIGGER_PIN_A1, ECHO_PIN_A0, MAX_DISTANCE);
@@ -146,6 +161,19 @@ int closest;
 Servo servo1;  // pin 41: cont. servo (left)
 Servo servo2;  // pin 40: cont. servo (right)
 Servo servo3;  // pin 19: 180° servo
+Servo servo4;  // pin 18: eyebrow left
+Servo servo5;  // pin 17: eyebrow right
+
+void setEyebrowAngles(int leftAngle, int rightAngle) {
+  eyebrowLeftAngle = constrain(leftAngle, 0, 180);
+  eyebrowRightAngle = constrain(rightAngle, 0, 180);
+  if (servo4.attached()) {
+    servo4.write(eyebrowLeftAngle);
+  }
+  if (servo5.attached()) {
+    servo5.write(eyebrowRightAngle);
+  }
+}
 
 void updateLCD(String str) {
   dwenguinoLCD.clear();
@@ -416,6 +444,7 @@ void softResetState() {
   updateLCD(" ");
   compatClearLedMatrix();
   compatSetRGBLed(0, 0, 0);
+  setEyebrowAngles(90, 90);
 }
 
 void applyEmotionOutputs() {
@@ -448,6 +477,7 @@ void applyEmotionOutputs() {
   } else {
     noTone(BUZZER);
   }
+  setEyebrowAngles(EYEBROW_ANGLES[maxIndex][0], EYEBROW_ANGLES[maxIndex][1]);
 }
 
 void sendTelemetry() {
@@ -477,6 +507,11 @@ void sendTelemetry() {
   Serial.print(EMO_NAMES[currentMatrixIndex]);
   Serial.print(F(","));
   Serial.println(currentLcdText);
+
+  Serial.print(F("BROW:"));
+  Serial.print(eyebrowLeftAngle);
+  Serial.print(F(","));
+  Serial.println(eyebrowRightAngle);
 
   Serial.print(F("EMO:"));
   for (int i = 0; i < EMO_COUNT; i++) {
@@ -601,6 +636,9 @@ void setup() {
   servo1.attach(DRIVE_LEFT_PIN);
   servo2.attach(DRIVE_RIGHT_PIN);
   servo3.attach(SONAR_PAN_PIN);
+  servo4.attach(EYEBROW_LEFT_PIN);
+  servo5.attach(EYEBROW_RIGHT_PIN);
+  setEyebrowAngles(90, 90);
   setSonarEnabled(true);
   stopRobot();
   refreshSonarSnapshot();
