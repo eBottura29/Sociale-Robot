@@ -1,0 +1,2 @@
+#include "../../firmware/main.cpp"
+

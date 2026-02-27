@@ -83,9 +83,24 @@ class ControlLabApp:
         body.columnconfigure(1, weight=2)
         body.rowconfigure(0, weight=1)
 
-        controls = ttk.Frame(body)
-        controls.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
+        controls_wrap = ttk.Frame(body)
+        controls_wrap.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
+        controls_wrap.rowconfigure(0, weight=1)
+        controls_wrap.columnconfigure(0, weight=1)
+
+        self.controls_canvas = tk.Canvas(controls_wrap, highlightthickness=0)
+        controls_scroll = ttk.Scrollbar(controls_wrap, orient="vertical", command=self.controls_canvas.yview)
+        self.controls_canvas.configure(yscrollcommand=controls_scroll.set)
+        self.controls_canvas.grid(row=0, column=0, sticky="nsew")
+        controls_scroll.grid(row=0, column=1, sticky="ns")
+
+        controls = ttk.Frame(self.controls_canvas)
         controls.columnconfigure(0, weight=1)
+        self.controls_window_id = self.controls_canvas.create_window((0, 0), window=controls, anchor="nw")
+        controls.bind("<Configure>", self._on_controls_configure)
+        self.controls_canvas.bind("<Configure>", self._on_controls_canvas_configure)
+        self.controls_canvas.bind("<Enter>", self._bind_controls_mousewheel)
+        self.controls_canvas.bind("<Leave>", self._unbind_controls_mousewheel)
 
         status = ttk.Frame(body)
         status.grid(row=0, column=1, sticky="nsew")
@@ -103,6 +118,22 @@ class ControlLabApp:
         self._build_rgb(controls)
         self._build_buzzer(controls)
         self._build_lcd(controls)
+
+    def _on_controls_configure(self, _event) -> None:
+        self.controls_canvas.configure(scrollregion=self.controls_canvas.bbox("all"))
+
+    def _on_controls_canvas_configure(self, event) -> None:
+        self.controls_canvas.itemconfigure(self.controls_window_id, width=event.width)
+
+    def _bind_controls_mousewheel(self, _event) -> None:
+        self.root.bind_all("<MouseWheel>", self._on_controls_mousewheel)
+
+    def _unbind_controls_mousewheel(self, _event) -> None:
+        self.root.unbind_all("<MouseWheel>")
+
+    def _on_controls_mousewheel(self, event) -> None:
+        delta = -1 if event.delta > 0 else 1
+        self.controls_canvas.yview_scroll(delta, "units")
 
     def _build_connection(self, parent: ttk.Frame) -> None:
         frame = ttk.Labelframe(parent, text="Connection", style="Section.TLabelframe")
@@ -509,14 +540,14 @@ class ControlLabApp:
         if line.startswith("BROW:"):
             p = line[5:].split(",")
             if len(p) >= 2:
-                self._set_t("Eyebrow Links", f"{self._safe_int(p[0])}°")
-                self._set_t("Eyebrow Rechts", f"{self._safe_int(p[1])}°")
+                self._set_t("Eyebrow Links", f"{self._safe_int(p[0])} deg")
+                self._set_t("Eyebrow Rechts", f"{self._safe_int(p[1])} deg")
             return
         if line.startswith("ACT:"):
             p = line[4:].split(",")
             if len(p) >= 4:
                 self._set_t("Pan Mode", p[0])
-                self._set_t("Pan Angle", f"{self._safe_int(p[1])}°")
+                self._set_t("Pan Angle", f"{self._safe_int(p[1])} deg")
                 self._set_t("Buzzer", "Aan" if p[2] == "1" else "Uit")
                 self._set_t("Buzzer Pitch", f"{self._safe_int(p[3])} Hz")
             return
@@ -538,10 +569,10 @@ class ControlLabApp:
             "RGB Status": "0,0,0",
             "Matrix": "-",
             "LCD": "-",
-            "Eyebrow Links": "90°",
-            "Eyebrow Rechts": "90°",
+            "Eyebrow Links": "90 deg",
+            "Eyebrow Rechts": "90 deg",
             "Pan Mode": "AUTO",
-            "Pan Angle": "90°",
+            "Pan Angle": "90 deg",
             "Buzzer": "Uit",
             "Buzzer Pitch": "880 Hz",
         }
