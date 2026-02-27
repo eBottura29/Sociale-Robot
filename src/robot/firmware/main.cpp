@@ -41,6 +41,11 @@ static inline void compatSetRGBLed(int r, int g, int b) {
 // - MOVE:<left>,<right>                 left/right = -255..255
 // - LCD:<text>                          tekst op LCD
 // - EMO:<h>,<fat>,<hun>,<sad>,<anx>,<aff>,<cur>,<fru>   0..100
+// - BROW:<leftAngle>,<rightAngle>       0..180
+// - PAN:AUTO / PAN:MANUAL               sonar pan servo mode
+// - PAN:<angle>                          set pan angle in MANUAL mode
+// - RGB:<r>,<g>,<b>                      0..255
+// - BUZZER:ON,<pitch> / BUZZER:OFF       pitch in Hz (100..5000)
 //
 // Robot -> PC
 // - READY
@@ -49,6 +54,7 @@ static inline void compatSetRGBLed(int r, int g, int b) {
 // - ACK:RESET
 // - STAT:<sonarL>,<sonarR>,<closest>,<battery>,<mode>  mode=STOP/CMD/MANUAL/AVOID/APPROACH/SEARCH/SONAR_OFF
 // - OUT:<r>,<g>,<b>,<buzzer>,<matrix>,<lcd>
+// - ACT:<panMode>,<panAngle>,<buzzerOn>,<buzzerPitch>
 // - BROW:<leftAngle>,<rightAngle>
 // - EMO:<h>,<fat>,<hun>,<sad>,<anx>,<aff>,<cur>,<fru>
 
@@ -79,6 +85,8 @@ static inline void compatSetRGBLed(int r, int g, int b) {
 #define NAV_SEARCH_TURN_SPEED 30
 #define NAV_SEARCH_FORWARD_MS 1200
 #define NAV_SEARCH_TURN_MS 800
+#define BUZZER_MIN_PITCH 100
+#define BUZZER_MAX_PITCH 5000
 
 const int EMO_COUNT = 8;
 const char *EMO_NAMES[EMO_COUNT] = {
@@ -115,6 +123,7 @@ unsigned long sonarPanMovedAtMs = 0;
 unsigned long sonarPanLastStepMs = 0;
 int sonarPanCurrentAngle = SONAR_SCAN_ANGLES[1];
 int sonarPanTargetAngle = SONAR_SCAN_ANGLES[1];
+bool sonarPanAutoMode = true;
 unsigned long navSearchUntilMs = 0;
 int navSearchLeft = 0;
 int navSearchRight = 0;
@@ -122,6 +131,7 @@ int navSearchRight = 0;
 int currentEmo[EMO_COUNT] = {0};
 int currentRgb[3] = {0, 0, 0};
 bool currentBuzzerOn = false;
+int currentBuzzerPitch = 880;
 int currentMatrixIndex = 0;
 char currentLcdText[LCD_TEXT_MAX + 1] = " ";
 unsigned long lastLcdScrollMs = 0;
@@ -172,6 +182,46 @@ void setEyebrowAngles(int leftAngle, int rightAngle) {
   }
   if (servo5.attached()) {
     servo5.write(eyebrowRightAngle);
+  }
+}
+
+void setPanAutoMode(bool enabled) {
+  sonarPanAutoMode = enabled;
+  if (sonarPanAutoMode) {
+    sonarPanTargetAngle = SONAR_SCAN_ANGLES[1];
+    sonarPanWaiting = false;
+  } else {
+    sonarPanWaiting = false;
+    sonarPanLastStepMs = 0;
+    if (servo3.attached()) {
+      servo3.write(sonarPanCurrentAngle);
+    }
+  }
+}
+
+void setPanManualAngle(int angle) {
+  sonarPanCurrentAngle = constrain(angle, 0, 180);
+  sonarPanTargetAngle = sonarPanCurrentAngle;
+  setPanAutoMode(false);
+  if (servo3.attached()) {
+    servo3.write(sonarPanCurrentAngle);
+  }
+}
+
+void setRgbOutput(int r, int g, int b) {
+  currentRgb[0] = constrain(r, 0, 255);
+  currentRgb[1] = constrain(g, 0, 255);
+  currentRgb[2] = constrain(b, 0, 255);
+  compatSetRGBLed(currentRgb[0], currentRgb[1], currentRgb[2]);
+}
+
+void setBuzzerOutput(bool enabled, int pitch) {
+  currentBuzzerPitch = constrain(pitch, BUZZER_MIN_PITCH, BUZZER_MAX_PITCH);
+  currentBuzzerOn = enabled;
+  if (currentBuzzerOn) {
+    tone(BUZZER, currentBuzzerPitch);
+  } else {
+    noTone(BUZZER);
   }
 }
 
@@ -303,9 +353,14 @@ void setSonarEnabled(bool enabled) {
   }
   sonarPanWaiting = false;
   sonarPanLastStepMs = 0;
-  sonarPanCurrentAngle = SONAR_SCAN_ANGLES[1];
-  sonarPanTargetAngle = SONAR_SCAN_ANGLES[1];
-  servo3.write(SONAR_SCAN_ANGLES[1]);
+  if (sonarPanAutoMode) {
+    sonarPanCurrentAngle = SONAR_SCAN_ANGLES[1];
+    sonarPanTargetAngle = SONAR_SCAN_ANGLES[1];
+    servo3.write(SONAR_SCAN_ANGLES[1]);
+  } else {
+    sonarPanTargetAngle = sonarPanCurrentAngle;
+    servo3.write(sonarPanCurrentAngle);
+  }
   for (int i = 0; i < SONAR_SCAN_POINTS; i++) {
     sonarScanBySector[i] = SONAR_FAR_CM;
   }
@@ -314,6 +369,11 @@ void setSonarEnabled(bool enabled) {
 
 void updateSonarScan() {
   if (!sonarEnabled) {
+    return;
+  }
+  if (!sonarPanAutoMode) {
+    sonarScanBySector[1] = readCombinedSonarCm();
+    refreshSonarSnapshot();
     return;
   }
   if (!sonarPanWaiting) {
@@ -421,15 +481,16 @@ void softResetState() {
   lastCmdMs = millis();
   lastTelemetryMs = 0;
   inputPos = 0;
-  currentRgb[0] = 0;
-  currentRgb[1] = 0;
-  currentRgb[2] = 0;
-  currentBuzzerOn = false;
+  setRgbOutput(0, 0, 0);
+  setBuzzerOutput(false, 880);
   currentMatrixIndex = 0;
   currentNavMode = "STOP";
   navSearchUntilMs = 0;
   navSearchLeft = 0;
   navSearchRight = 0;
+  sonarPanCurrentAngle = SONAR_SCAN_ANGLES[1];
+  sonarPanTargetAngle = SONAR_SCAN_ANGLES[1];
+  setPanAutoMode(true);
   for (int i = 0; i < SONAR_SCAN_POINTS; i++) {
     sonarScanBySector[i] = SONAR_FAR_CM;
   }
@@ -440,10 +501,8 @@ void softResetState() {
     currentEmo[i] = 0;
   }
   stopRobot();
-  noTone(BUZZER);
   updateLCD(" ");
   compatClearLedMatrix();
-  compatSetRGBLed(0, 0, 0);
   setEyebrowAngles(90, 90);
 }
 
@@ -460,23 +519,17 @@ void applyEmotionOutputs() {
   setMatrixPattern(MATRIX_PATTERNS[maxIndex]);
 
   switch (maxIndex) {
-    case 0: currentRgb[0] = 0; currentRgb[1] = 255; currentRgb[2] = 0; break;    // Happiness
-    case 1: currentRgb[0] = 255; currentRgb[1] = 140; currentRgb[2] = 0; break;  // Fatigue
-    case 2: currentRgb[0] = 255; currentRgb[1] = 0; currentRgb[2] = 0; break;    // Hunger
-    case 3: currentRgb[0] = 0; currentRgb[1] = 0; currentRgb[2] = 255; break;    // Sadness
-    case 4: currentRgb[0] = 255; currentRgb[1] = 0; currentRgb[2] = 255; break;  // Anxiety
-    case 5: currentRgb[0] = 255; currentRgb[1] = 105; currentRgb[2] = 180; break;// Affection
-    case 6: currentRgb[0] = 0; currentRgb[1] = 255; currentRgb[2] = 255; break;  // Curiosity
-    default: currentRgb[0] = 255; currentRgb[1] = 70; currentRgb[2] = 0; break;  // Frustration
+    case 0: setRgbOutput(0, 255, 0); break;      // Happiness
+    case 1: setRgbOutput(255, 140, 0); break;    // Fatigue
+    case 2: setRgbOutput(255, 0, 0); break;      // Hunger
+    case 3: setRgbOutput(0, 0, 255); break;      // Sadness
+    case 4: setRgbOutput(255, 0, 255); break;    // Anxiety
+    case 5: setRgbOutput(255, 105, 180); break;  // Affection
+    case 6: setRgbOutput(0, 255, 255); break;    // Curiosity
+    default: setRgbOutput(255, 70, 0); break;    // Frustration
   }
-  compatSetRGBLed(currentRgb[0], currentRgb[1], currentRgb[2]);
 
-  currentBuzzerOn = (currentEmo[4] > 70 || currentEmo[7] > 70);
-  if (currentBuzzerOn) {
-    tone(BUZZER, 880);
-  } else {
-    noTone(BUZZER);
-  }
+  setBuzzerOutput(currentEmo[4] > 70 || currentEmo[7] > 70, 880);
   setEyebrowAngles(EYEBROW_ANGLES[maxIndex][0], EYEBROW_ANGLES[maxIndex][1]);
 }
 
@@ -512,6 +565,15 @@ void sendTelemetry() {
   Serial.print(eyebrowLeftAngle);
   Serial.print(F(","));
   Serial.println(eyebrowRightAngle);
+
+  Serial.print(F("ACT:"));
+  Serial.print(sonarPanAutoMode ? F("AUTO") : F("MANUAL"));
+  Serial.print(F(","));
+  Serial.print(sonarPanCurrentAngle);
+  Serial.print(F(","));
+  Serial.print(currentBuzzerOn ? 1 : 0);
+  Serial.print(F(","));
+  Serial.println(currentBuzzerPitch);
 
   Serial.print(F("EMO:"));
   for (int i = 0; i < EMO_COUNT; i++) {
@@ -577,6 +639,59 @@ void handleLine(String line) {
     String msg = line.substring(4);
     updateLCD(msg);
     Serial.println(F("ACK:LCD"));
+    return;
+  }
+  if (line.startsWith("BROW:")) {
+    int commaIndex = line.indexOf(',', 5);
+    if (commaIndex > 0) {
+      int leftAngle = line.substring(5, commaIndex).toInt();
+      int rightAngle = line.substring(commaIndex + 1).toInt();
+      setEyebrowAngles(leftAngle, rightAngle);
+      Serial.println(F("ACK:BROW"));
+    }
+    return;
+  }
+  if (line == "PAN:AUTO") {
+    setPanAutoMode(true);
+    Serial.println(F("ACK:PAN:AUTO"));
+    return;
+  }
+  if (line == "PAN:MANUAL") {
+    setPanAutoMode(false);
+    Serial.println(F("ACK:PAN:MANUAL"));
+    return;
+  }
+  if (line.startsWith("PAN:")) {
+    int angle = line.substring(4).toInt();
+    setPanManualAngle(angle);
+    Serial.println(F("ACK:PAN"));
+    return;
+  }
+  if (line.startsWith("RGB:")) {
+    int first = line.indexOf(',', 4);
+    int second = line.indexOf(',', first + 1);
+    if (first > 0 && second > first) {
+      int r = line.substring(4, first).toInt();
+      int g = line.substring(first + 1, second).toInt();
+      int b = line.substring(second + 1).toInt();
+      setRgbOutput(r, g, b);
+      Serial.println(F("ACK:RGB"));
+    }
+    return;
+  }
+  if (line == "BUZZER:OFF") {
+    setBuzzerOutput(false, currentBuzzerPitch);
+    Serial.println(F("ACK:BUZZER:OFF"));
+    return;
+  }
+  if (line.startsWith("BUZZER:ON")) {
+    int pitch = currentBuzzerPitch;
+    int commaIndex = line.indexOf(',');
+    if (commaIndex > 0) {
+      pitch = line.substring(commaIndex + 1).toInt();
+    }
+    setBuzzerOutput(true, pitch);
+    Serial.println(F("ACK:BUZZER:ON"));
     return;
   }
   if (line.startsWith("EMO:")) {

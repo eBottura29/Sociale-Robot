@@ -1,0 +1,14 @@
+{
+  "forward": "z",
+  "backward": "s",
+  "left": "q",
+  "right": "d",
+  "toggle_motion": "m",
+  "toggle_sonar": "t",
+  "toggle_pan_mode": "p",
+  "toggle_buzzer": "b",
+  "send_lcd": "return",
+  "apply_emotion": "e",
+  "apply_rgb": "c",
+  "apply_eyebrows": "x"
+}
