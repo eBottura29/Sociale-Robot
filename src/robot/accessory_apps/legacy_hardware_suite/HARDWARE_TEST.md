@@ -1,6 +1,6 @@
 # NIER Hardware Test Guide
 
-This guide documents `src/robot/testing/legacy_hardware_suite/hardware_test.cpp`.
+This guide documents `src/robot/accessory_apps/legacy_hardware_suite/hardware_test.cpp`.
 
 Testing:
 - 2x continuous servos for left/right tracks
@@ -22,7 +22,7 @@ Testing:
 
 ## 2. File Location
 
-- Sketch: `src/robot/testing/legacy_hardware_suite/hardware_test.cpp`
+- Sketch: `src/robot/accessory_apps/legacy_hardware_suite/hardware_test.cpp`
 
 ## 3. What the Test Does (In Order)
 

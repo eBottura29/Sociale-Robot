@@ -11,6 +11,7 @@ import serial
 
 from config import EMOTIONS
 from emotions import EmotionEngine
+from led_matrix_store import load_led_matrix_patterns, matrix_commands_for_emotion
 from llm import LlmEngine
 from serial_client import SerialManager
 
@@ -50,6 +51,7 @@ class NierDesktopApp:
         self.serial = SerialManager(debug_cb=self._on_serial_tx_debug)
         self.llm = LlmEngine(debug_cb=self._on_llm_debug)
         self.emotions = EmotionEngine()
+        self.matrix_patterns = load_led_matrix_patterns(EMOTIONS)
 
         self._build_style()
         self._build_layout()
@@ -343,6 +345,9 @@ class NierDesktopApp:
 
         if self.connected and self.serial.serial_port:
             self._send_line(f"LCD:{self._truncate_for_serial(response)}")
+            dominant = max(EMOTIONS, key=lambda name: emotions.get(name, 0))
+            for matrix_cmd in matrix_commands_for_emotion(dominant, self.matrix_patterns):
+                self._send_line(matrix_cmd)
             self._send_line(f"EMO:{self._serialize_emotions(emotions)}")
             self._set_telemetry("Laatste Commando", "LCD/EMO")
         else:

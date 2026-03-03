@@ -12,6 +12,7 @@ if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
 from config import CONTROL_LAB_DEFAULTS, EMOTIONS
+from led_matrix_store import load_led_matrix_patterns, matrix_commands_for_emotion
 from serial_client import SerialManager
 
 
@@ -54,6 +55,7 @@ class ControlLabApp:
         self.last_drive_sent_at = 0.0
 
         self.keybinds = self._load_keybinds()
+        self.matrix_patterns = load_led_matrix_patterns(EMOTIONS)
 
         self._build_style()
         self._build_ui()
@@ -422,8 +424,11 @@ class ControlLabApp:
 
     def _send_emotion(self) -> None:
         values = {name: 0 for name in EMOTIONS}
-        values[self.emo_name_var.get()] = int(self.emo_intensity_var.get())
+        emotion_name = self.emo_name_var.get()
+        values[emotion_name] = int(self.emo_intensity_var.get())
         payload = ",".join(str(values[name]) for name in EMOTIONS)
+        for matrix_cmd in matrix_commands_for_emotion(emotion_name, self.matrix_patterns):
+            self._send_line(matrix_cmd)
         self._send_line(f"EMO:{payload}")
 
     def _clear_emotions(self) -> None:

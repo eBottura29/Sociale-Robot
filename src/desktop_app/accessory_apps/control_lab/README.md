@@ -7,7 +7,7 @@ Interactive hardware testing app for NIER that uses the same serial protocol as 
 From project root:
 
 ```bash
-python src/desktop_app/testing/control_lab/control_lab_app.py
+python src/desktop_app/accessory_apps/control_lab/control_lab_app.py
 ```
 
 ## Features
@@ -25,6 +25,6 @@ python src/desktop_app/testing/control_lab/control_lab_app.py
 
 Keybinds are loaded from:
 
-- `src/desktop_app/testing/control_lab/keybinds.json`
+- `src/desktop_app/accessory_apps/control_lab/keybinds.json`
 
 Edit this file to customize shortcuts.

@@ -6,9 +6,9 @@
 #include <LedController.hpp>
 
 // --- Dwenguino simulator compatibility shims ---
-// Use LedController to drive 4 LED matrix segments; choose one fixed segment for emotion output.
+// Use LedController to drive 4 LED matrix segments.
 LedController<4, 1> led_matrix;
-#define LED_MATRIX_SEGMENT_INDEX 2  // 0..3
+#define LED_MATRIX_SEGMENT_COUNT 4
 
 static inline void compatInitLedMatrix() {
   auto conf = controller_configuration<4, 1>();
@@ -48,6 +48,7 @@ static inline void compatSetRGBLed(int r, int g, int b) {
 // - PAN:<angle>                          set pan angle in MANUAL mode
 // - RGB:<r>,<g>,<b>                      0..255
 // - BUZZER:ON,<pitch> / BUZZER:OFF       pitch in Hz (100..5000)
+// - MATRIX:<segment>,<row0>..<row7>      segment=0..3, each row byte 0..255
 //
 // Robot -> PC
 // - READY
@@ -143,17 +144,7 @@ int lcdScrollIndex = 0;
 int lcdScrollLength = 0;
 int eyebrowLeftAngle = 90;
 int eyebrowRightAngle = 90;
-
-const byte MATRIX_PATTERNS[EMO_COUNT][8] = {
-  {0b00000000, 0b01000010, 0b10100101, 0b10000001, 0b10100101, 0b10011001, 0b01000010, 0b00111100}, // HAPPINESS
-  {0b00000000, 0b11000011, 0b10100101, 0b10000001, 0b10100101, 0b10000001, 0b01000010, 0b00111100}, // FATIGUE
-  {0b00011000, 0b00111100, 0b01111110, 0b11111111, 0b11111111, 0b01111110, 0b00111100, 0b00011000}, // HUNGER
-  {0b00000000, 0b01000010, 0b10100101, 0b10000001, 0b10011001, 0b10100101, 0b01000010, 0b00111100}, // SADNESS
-  {0b00111100, 0b01000010, 0b10100101, 0b10011001, 0b10000001, 0b10100101, 0b01000010, 0b00111100}, // ANXIETY
-  {0b00000000, 0b01000010, 0b10100101, 0b10011001, 0b10011001, 0b10100101, 0b01000010, 0b00111100}, // AFFECTION
-  {0b00011000, 0b00100100, 0b01000010, 0b10100101, 0b10000001, 0b01000010, 0b00100100, 0b00011000}, // CURIOSITY
-  {0b11111111, 0b10000001, 0b10111101, 0b10100101, 0b10100101, 0b10111101, 0b10000001, 0b11111111}  // FRUSTRATION
-};
+byte currentMatrixFrame[LED_MATRIX_SEGMENT_COUNT][8] = {};
 const int EYEBROW_ANGLES[EMO_COUNT][2] = {
   {120, 60},   // HAPPINESS
   {75, 105},   // FATIGUE
@@ -467,12 +458,21 @@ void applyAutonomousNavigation() {
   currentNavMode = "SEARCH";
 }
 
-void setMatrixPattern(const byte pattern[8]) {
+void setMatrixPattern(int segment, const byte pattern[8]) {
+  if (segment < 0 || segment >= LED_MATRIX_SEGMENT_COUNT) {
+    return;
+  }
   ByteBlock block = {};
   for (int row = 0; row < 8; row++) {
     block[row] = pattern[row];
   }
-  led_matrix.displayOnSegment(LED_MATRIX_SEGMENT_INDEX, block);
+  led_matrix.displayOnSegment(segment, block);
+}
+
+void displayCurrentMatrixFrame() {
+  for (int segment = 0; segment < LED_MATRIX_SEGMENT_COUNT; segment++) {
+    setMatrixPattern(segment, currentMatrixFrame[segment]);
+  }
 }
 
 void softResetState() {
@@ -502,6 +502,11 @@ void softResetState() {
   for (int i = 0; i < EMO_COUNT; i++) {
     currentEmo[i] = 0;
   }
+  for (int segment = 0; segment < LED_MATRIX_SEGMENT_COUNT; segment++) {
+    for (int row = 0; row < 8; row++) {
+      currentMatrixFrame[segment][row] = 0;
+    }
+  }
   stopRobot();
   updateLCD(" ");
   compatClearLedMatrix();
@@ -518,7 +523,7 @@ void applyEmotionOutputs() {
     }
   }
   currentMatrixIndex = maxIndex;
-  setMatrixPattern(MATRIX_PATTERNS[maxIndex]);
+  displayCurrentMatrixFrame();
 
   switch (maxIndex) {
     case 0: setRgbOutput(0, 255, 0); break;      // Happiness
@@ -667,6 +672,31 @@ void handleLine(String line) {
     int angle = line.substring(4).toInt();
     setPanManualAngle(angle);
     Serial.println(F("ACK:PAN"));
+    return;
+  }
+  if (line.startsWith("MATRIX:")) {
+    String payload = line.substring(7);
+    int firstComma = payload.indexOf(',');
+    if (firstComma > 0) {
+      int segment = payload.substring(0, firstComma).toInt();
+      if (segment >= 0 && segment < LED_MATRIX_SEGMENT_COUNT) {
+        int start = firstComma + 1;
+        int idx = 0;
+        while (idx < 8 && start < (int)payload.length()) {
+          int comma = payload.indexOf(',', start);
+          String token = (comma >= 0) ? payload.substring(start, comma) : payload.substring(start);
+          currentMatrixFrame[segment][idx++] = (byte)constrain(token.toInt(), 0, 255);
+          if (comma < 0) {
+            break;
+          }
+          start = comma + 1;
+        }
+        if (idx == 8) {
+          setMatrixPattern(segment, currentMatrixFrame[segment]);
+          Serial.println(F("ACK:MATRIX"));
+        }
+      }
+    }
     return;
   }
   if (line.startsWith("RGB:")) {

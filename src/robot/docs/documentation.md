@@ -11,10 +11,10 @@ Use these paths as your reference when reading or modifying the project.
 
 - `src/desktop_app/` Python desktop app (GUI, LLM, emotions, serial, navigation).
 - `src/robot/firmware/main.cpp` Robot firmware for Dwenguino.
-- `src/robot/testing/legacy_hardware_suite/hardware_test.cpp` Full staged hardware test sketch.
-- `src/robot/testing/legacy_hardware_suite/HARDWARE_TEST.md` Expected outcomes and troubleshooting for the hardware test.
-- `src/robot/testing/control_lab/README.md` Control Lab robot-side protocol notes.
-- `src/desktop_app/testing/control_lab/control_lab_app.py` Interactive control/testing desktop tool.
+- `src/robot/accessory_apps/legacy_hardware_suite/hardware_test.cpp` Full staged hardware test sketch.
+- `src/robot/accessory_apps/legacy_hardware_suite/HARDWARE_TEST.md` Expected outcomes and troubleshooting for the hardware test.
+- `src/robot/accessory_apps/control_lab/README.md` Control Lab robot-side protocol notes.
+- `src/desktop_app/accessory_apps/control_lab/control_lab_app.py` Interactive control/testing desktop tool.
 - `src/robot/prototyping/` Older one-off experiments and prototype sketches.
 - `src/robot/docs/documentation.md` This document.
 - `requirements.txt` Python dependencies.
@@ -92,8 +92,8 @@ The firmware is in `src/robot/firmware/main.cpp`.
 
 Use this before demo day or after rewiring:
 
-- Flash `src/robot/testing/legacy_hardware_suite/hardware_test.cpp`
-- Follow `src/robot/testing/legacy_hardware_suite/HARDWARE_TEST.md` for expected pass/fail behavior
+- Flash `src/robot/accessory_apps/legacy_hardware_suite/hardware_test.cpp`
+- Follow `src/robot/accessory_apps/legacy_hardware_suite/HARDWARE_TEST.md` for expected pass/fail behavior
 - Press `SW_C` to rerun the full test suite
 
 ---
