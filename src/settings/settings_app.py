@@ -44,6 +44,7 @@ class SettingsApp:
 
         self.settings = load_settings()
         self.vars: dict[str, tk.StringVar] = {}
+        self.brow_vars: dict[str, tuple[tk.StringVar, tk.StringVar]] = {}
 
         self._build_style()
         self._build_ui()
@@ -82,8 +83,15 @@ class SettingsApp:
         self.emotions_text = tk.Text(emotions_frame, height=4, font=("Consolas", 10))
         self.emotions_text.grid(row=0, column=0, sticky="ew")
 
+        brows_frame = ttk.Labelframe(body, text="Emotion Eyebrow Angles", style="Section.TLabelframe")
+        brows_frame.grid(row=1, column=0, sticky="ew", pady=(0, 8))
+        brows_frame.columnconfigure(1, weight=1)
+        brows_frame.columnconfigure(2, weight=1)
+        self.brows_rows = ttk.Frame(brows_frame)
+        self.brows_rows.grid(row=0, column=0, sticky="ew")
+
         fields_frame = ttk.Labelframe(body, text="General Settings", style="Section.TLabelframe")
-        fields_frame.grid(row=1, column=0, sticky="nsew")
+        fields_frame.grid(row=2, column=0, sticky="nsew")
         fields_frame.rowconfigure(0, weight=1)
         fields_frame.columnconfigure(0, weight=1)
 
@@ -113,10 +121,35 @@ class SettingsApp:
             self.vars[path] = var
 
         buttons = ttk.Frame(body)
-        buttons.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+        buttons.grid(row=3, column=0, sticky="ew", pady=(10, 0))
         buttons.columnconfigure(0, weight=1)
         ttk.Button(buttons, text="Reload", command=self._reload).grid(row=0, column=1, padx=(0, 8))
         ttk.Button(buttons, text="Save", style="Primary.TButton", command=self._save).grid(row=0, column=2)
+
+    def _emotion_names_from_box(self) -> list[str]:
+        names = [
+            line.strip()
+            for line in self.emotions_text.get("1.0", "end").splitlines()
+            if line.strip()
+        ]
+        return names
+
+    def _rebuild_brow_rows(self, emotions: list[str]) -> None:
+        for child in self.brows_rows.winfo_children():
+            child.destroy()
+        self.brow_vars.clear()
+
+        ttk.Label(self.brows_rows, text="Emotion").grid(row=0, column=0, sticky="w", padx=(0, 8))
+        ttk.Label(self.brows_rows, text="Left (0-180)").grid(row=0, column=1, sticky="w", padx=(0, 8))
+        ttk.Label(self.brows_rows, text="Right (0-180)").grid(row=0, column=2, sticky="w")
+
+        for idx, emotion in enumerate(emotions, start=1):
+            left_var = tk.StringVar(value="90")
+            right_var = tk.StringVar(value="90")
+            ttk.Label(self.brows_rows, text=emotion).grid(row=idx, column=0, sticky="w", pady=2, padx=(0, 8))
+            ttk.Entry(self.brows_rows, textvariable=left_var, width=8).grid(row=idx, column=1, sticky="w", pady=2, padx=(0, 8))
+            ttk.Entry(self.brows_rows, textvariable=right_var, width=8).grid(row=idx, column=2, sticky="w", pady=2)
+            self.brow_vars[emotion] = (left_var, right_var)
 
     def _load_values(self) -> None:
         for _label, path, _typ in FIELD_SPECS:
@@ -126,6 +159,19 @@ class SettingsApp:
         emotions = get_by_path(self.settings, "desktop_app.emotions", [])
         self.emotions_text.delete("1.0", "end")
         self.emotions_text.insert("1.0", "\n".join(str(item) for item in emotions))
+        self._rebuild_brow_rows([str(item) for item in emotions])
+
+        eyebrow_map = get_by_path(self.settings, "robot.defaults.eyebrow_angles_by_emotion", {})
+        if isinstance(eyebrow_map, dict):
+            for emotion in emotions:
+                vars_pair = self.brow_vars.get(str(emotion))
+                if not vars_pair:
+                    continue
+                left_var, right_var = vars_pair
+                values = eyebrow_map.get(str(emotion).upper())
+                if isinstance(values, list) and len(values) >= 2:
+                    left_var.set(str(values[0]))
+                    right_var.set(str(values[1]))
 
     def _reload(self) -> None:
         self.settings = load_settings()
@@ -149,12 +195,22 @@ class SettingsApp:
                 value = self._parse_value(raw, typ)
                 set_by_path(updated, path, value)
 
-            emotion_lines = [
-                line.strip()
-                for line in self.emotions_text.get("1.0", "end").splitlines()
-                if line.strip()
-            ]
+            emotion_lines = self._emotion_names_from_box()
             set_by_path(updated, "desktop_app.emotions", emotion_lines)
+
+            eyebrows = {}
+            for emotion in emotion_lines:
+                vars_pair = self.brow_vars.get(emotion)
+                if vars_pair:
+                    left_raw = vars_pair[0].get().strip()
+                    right_raw = vars_pair[1].get().strip()
+                else:
+                    left_raw = "90"
+                    right_raw = "90"
+                left = max(0, min(180, int(left_raw)))
+                right = max(0, min(180, int(right_raw)))
+                eyebrows[emotion.upper()] = [left, right]
+            set_by_path(updated, "robot.defaults.eyebrow_angles_by_emotion", eyebrows)
         except ValueError as exc:
             messagebox.showerror("Invalid value", str(exc))
             return

@@ -48,6 +48,7 @@ static inline void compatSetRGBLed(int r, int g, int b) {
 // - PAN:<angle>                          set pan angle in MANUAL mode
 // - RGB:<r>,<g>,<b>                      0..255
 // - BUZZER:ON,<pitch> / BUZZER:OFF       pitch in Hz (100..5000)
+// - BROWMAP:<emotionIndex>,<left>,<right>  emotionIndex=0..7, angles 0..180
 // - MATRIX:<segment>,<row0>..<row7>      segment=0..3, each row byte 0..255
 //
 // Robot -> PC
@@ -145,16 +146,7 @@ int lcdScrollLength = 0;
 int eyebrowLeftAngle = 90;
 int eyebrowRightAngle = 90;
 byte currentMatrixFrame[LED_MATRIX_SEGMENT_COUNT][8] = {};
-const int EYEBROW_ANGLES[EMO_COUNT][2] = {
-  {120, 60},   // HAPPINESS
-  {75, 105},   // FATIGUE
-  {85, 95},    // HUNGER
-  {65, 115},   // SADNESS
-  {140, 40},   // ANXIETY
-  {110, 70},   // AFFECTION
-  {130, 50},   // CURIOSITY
-  {45, 135}    // FRUSTRATION
-};
+int emotionEyebrowAngles[EMO_COUNT][2] = {};
 
 NewPing sonarA1A0(TRIGGER_PIN_A1, ECHO_PIN_A0, MAX_DISTANCE);
 NewPing sonarA3A2(TRIGGER_PIN_A3, ECHO_PIN_A2, MAX_DISTANCE);
@@ -501,6 +493,8 @@ void softResetState() {
   refreshSonarSnapshot();
   for (int i = 0; i < EMO_COUNT; i++) {
     currentEmo[i] = 0;
+    emotionEyebrowAngles[i][0] = 90;
+    emotionEyebrowAngles[i][1] = 90;
   }
   for (int segment = 0; segment < LED_MATRIX_SEGMENT_COUNT; segment++) {
     for (int row = 0; row < 8; row++) {
@@ -537,7 +531,7 @@ void applyEmotionOutputs() {
   }
 
   setBuzzerOutput(currentEmo[4] > 70 || currentEmo[7] > 70, 880);
-  setEyebrowAngles(EYEBROW_ANGLES[maxIndex][0], EYEBROW_ANGLES[maxIndex][1]);
+  setEyebrowAngles(emotionEyebrowAngles[maxIndex][0], emotionEyebrowAngles[maxIndex][1]);
 }
 
 void sendTelemetry() {
@@ -674,6 +668,22 @@ void handleLine(String line) {
     Serial.println(F("ACK:PAN"));
     return;
   }
+  if (line.startsWith("BROWMAP:")) {
+    String payload = line.substring(8);
+    int first = payload.indexOf(',');
+    int second = payload.indexOf(',', first + 1);
+    if (first > 0 && second > first) {
+      int emoIndex = payload.substring(0, first).toInt();
+      int leftAngle = payload.substring(first + 1, second).toInt();
+      int rightAngle = payload.substring(second + 1).toInt();
+      if (emoIndex >= 0 && emoIndex < EMO_COUNT) {
+        emotionEyebrowAngles[emoIndex][0] = constrain(leftAngle, 0, 180);
+        emotionEyebrowAngles[emoIndex][1] = constrain(rightAngle, 0, 180);
+        Serial.println(F("ACK:BROWMAP"));
+      }
+    }
+    return;
+  }
   if (line.startsWith("MATRIX:")) {
     String payload = line.substring(7);
     int firstComma = payload.indexOf(',');
@@ -793,6 +803,10 @@ void setup() {
 
   updateLCD(" ");
   compatClearLedMatrix();
+  for (int i = 0; i < EMO_COUNT; i++) {
+    emotionEyebrowAngles[i][0] = 90;
+    emotionEyebrowAngles[i][1] = 90;
+  }
   applyEmotionOutputs();
 }
 
