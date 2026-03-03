@@ -3,32 +3,34 @@
 #include <LiquidCrystal.h>
 #include <NewPing.h>
 #include <Servo.h>
+#include <LedController.hpp>
 
 // --- Dwenguino simulator compatibility shims ---
-// Some simulator builds expose the LCD helpers but not the LED matrix/RGB helpers.
-// Keep LED matrix calls as no-ops when the API isn't available so the sketch compiles.
-static inline void compatClearLedMatrix() {}
+// Use LedController to drive 4 LED matrix segments; choose one fixed segment for emotion output.
+LedController<4, 1> led_matrix;
+#define LED_MATRIX_SEGMENT_INDEX 2  // 0..3
 
-static inline void compatSetLedMatrixPixel(int x, int y, bool on) {
-  (void)x;
-  (void)y;
-  (void)on;
+static inline void compatInitLedMatrix() {
+  auto conf = controller_configuration<4, 1>();
+  conf.useHardwareSpi = false;
+  conf.SPI_CLK = 13;
+  conf.SPI_MOSI = 2;
+  conf.SPI_CS = 10;
+  led_matrix.init(conf);
+  led_matrix.activateAllSegments();
+  led_matrix.setIntensity(8);
+  led_matrix.clearMatrix();
+}
+
+static inline void compatClearLedMatrix() {
+  led_matrix.clearMatrix();
 }
 
 static inline void compatSetRGBLed(int r, int g, int b) {
-#if defined(LED_R) && defined(LED_G) && defined(LED_B)
-  analogWrite(LED_R, constrain(r, 0, 255));
-  analogWrite(LED_G, constrain(g, 0, 255));
-  analogWrite(LED_B, constrain(b, 0, 255));
-#elif defined(RGB_LED_R) && defined(RGB_LED_G) && defined(RGB_LED_B)
-  analogWrite(RGB_LED_R, constrain(r, 0, 255));
-  analogWrite(RGB_LED_G, constrain(g, 0, 255));
-  analogWrite(RGB_LED_B, constrain(b, 0, 255));
-#else
-  (void)r;
-  (void)g;
-  (void)b;
-#endif
+  // Dwenguino RGB LED pins are fixed in hardware.
+  analogWrite(11, constrain(r, 0, 255));  // Red
+  analogWrite(14, constrain(g, 0, 255));  // Green
+  analogWrite(15, constrain(b, 0, 255));  // Blue
 }
 
 // Serieel protocol (regels, ASCII, newline)
@@ -59,6 +61,7 @@ static inline void compatSetRGBLed(int r, int g, int b) {
 // - EMO:<h>,<fat>,<hun>,<sad>,<anx>,<aff>,<cur>,<fru>
 
 // Keep these in sync with src/settings/settings.json (robot.pins / robot.* defaults).
+// RGB LED is fixed by Dwenguino hardware: R=11, G=14, B=15.
 #define DRIVE_LEFT_PIN 41
 #define DRIVE_RIGHT_PIN 40
 #define SONAR_PAN_PIN 19
@@ -465,13 +468,11 @@ void applyAutonomousNavigation() {
 }
 
 void setMatrixPattern(const byte pattern[8]) {
-  compatClearLedMatrix();
-  for (int y = 0; y < 8; y++) {
-    for (int x = 0; x < 8; x++) {
-      bool on = (pattern[y] >> (7 - x)) & 0x01;
-      compatSetLedMatrixPixel(x, y, on);
-    }
+  ByteBlock block = {};
+  for (int row = 0; row < 8; row++) {
+    block[row] = pattern[row];
   }
+  led_matrix.displayOnSegment(LED_MATRIX_SEGMENT_INDEX, block);
 }
 
 void softResetState() {
@@ -739,6 +740,7 @@ void readSerial() {
 
 void setup() {
   initDwenguino();
+  compatInitLedMatrix();
 
   pinMode(SW_N, INPUT_PULLUP);
   pinMode(SW_W, INPUT_PULLUP);

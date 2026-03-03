@@ -10,6 +10,9 @@
 #define LEFT_TRACK_SERVO_PIN 41
 #define RIGHT_TRACK_SERVO_PIN 40
 #define SONAR_PAN_SERVO_PIN 19
+#define RGB_RED_PIN 11
+#define RGB_GREEN_PIN 14
+#define RGB_BLUE_PIN 15
 
 #define SONAR_1_TRIG_PIN A1
 #define SONAR_1_ECHO_PIN A0
@@ -73,29 +76,9 @@ void setBoardLeds(uint8_t mask) {
 }
 
 void setRgbLed(uint8_t r, uint8_t g, uint8_t b) {
-#if defined(LED_R) && defined(LED_G) && defined(LED_B)
-  analogWrite(LED_R, r);
-  analogWrite(LED_G, g);
-  analogWrite(LED_B, b);
-#elif defined(RGB_LED_R) && defined(RGB_LED_G) && defined(RGB_LED_B)
-  analogWrite(RGB_LED_R, r);
-  analogWrite(RGB_LED_G, g);
-  analogWrite(RGB_LED_B, b);
-#else
-  (void)r;
-  (void)g;
-  (void)b;
-#endif
-}
-
-bool rgbPinsAvailable() {
-#if defined(LED_R) && defined(LED_G) && defined(LED_B)
-  return true;
-#elif defined(RGB_LED_R) && defined(RGB_LED_G) && defined(RGB_LED_B)
-  return true;
-#else
-  return false;
-#endif
+  analogWrite(RGB_RED_PIN, r);
+  analogWrite(RGB_GREEN_PIN, g);
+  analogWrite(RGB_BLUE_PIN, b);
 }
 
 void reportPass(const char *name) {
@@ -241,11 +224,6 @@ void testLedMatrixScreens() {
 
 void testRgbLed() {
   lcdShow("RGB LED test", "R -> G -> B");
-
-  if (!rgbPinsAvailable()) {
-    reportSkip("RGB LED", "No RGB pin macros in this board profile");
-    return;
-  }
 
   setRgbLed(255, 0, 0);
   delay(600);

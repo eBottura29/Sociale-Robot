@@ -463,10 +463,11 @@ class ControlLabApp:
     def _update_drive_from_keys(self) -> None:
         if not self.motion_enabled.get():
             return
-        fwd = self.keybinds["forward"] in self.active_keys
-        back = self.keybinds["backward"] in self.active_keys
-        left = self.keybinds["left"] in self.active_keys
-        right = self.keybinds["right"] in self.active_keys
+        # Invert both axes so key directions are flipped in control lab.
+        fwd = self.keybinds["backward"] in self.active_keys
+        back = self.keybinds["forward"] in self.active_keys
+        left = self.keybinds["right"] in self.active_keys
+        right = self.keybinds["left"] in self.active_keys
 
         speed = int(self.speed_var.get())
         move = (0, 0)
