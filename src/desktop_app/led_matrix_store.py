@@ -162,8 +162,11 @@ def matrix_commands_for_emotion(
         return []
     segments = _normalize_emotion_segments(copy.deepcopy(patterns_by_emotion[emotion]))
     commands = []
+    # Logical order in settings/UI is left, center, right.
+    # Hardware send order is flipped for outer matrices: right, center, left.
+    segment_tx_index = [2, 1, 0]
     for seg_idx, rows in enumerate(segments):
         payload_rows = _rotate_left_8x8(rows) if compensate_rotation else rows
         csv = ",".join(str(v) for v in payload_rows)
-        commands.append(f"MATRIX:{seg_idx},{csv}")
+        commands.append(f"MATRIX:{segment_tx_index[seg_idx]},{csv}")
     return commands
