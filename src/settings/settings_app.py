@@ -140,8 +140,8 @@ class SettingsApp:
         self.brow_vars.clear()
 
         ttk.Label(self.brows_rows, text="Emotion").grid(row=0, column=0, sticky="w", padx=(0, 8))
-        ttk.Label(self.brows_rows, text="Left (0-180)").grid(row=0, column=1, sticky="w", padx=(0, 8))
-        ttk.Label(self.brows_rows, text="Right (0-180)").grid(row=0, column=2, sticky="w")
+        ttk.Label(self.brows_rows, text="Left (45-135)").grid(row=0, column=1, sticky="w", padx=(0, 8))
+        ttk.Label(self.brows_rows, text="Right (45-135)").grid(row=0, column=2, sticky="w")
 
         for idx, emotion in enumerate(emotions, start=1):
             left_var = tk.StringVar(value="90")
@@ -207,8 +207,8 @@ class SettingsApp:
                 else:
                     left_raw = "90"
                     right_raw = "90"
-                left = max(0, min(180, int(left_raw)))
-                right = max(0, min(180, int(right_raw)))
+                left = max(45, min(135, int(left_raw)))
+                right = max(45, min(135, int(right_raw)))
                 eyebrows[emotion.upper()] = [left, right]
             set_by_path(updated, "robot.defaults.eyebrow_angles_by_emotion", eyebrows)
         except ValueError as exc:

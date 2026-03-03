@@ -197,11 +197,11 @@ class ControlLabApp:
         frame.grid(row=2, column=0, sticky="ew", pady=(0, 8))
         frame.columnconfigure(1, weight=1)
         ttk.Label(frame, text="Left").grid(row=0, column=0, sticky="w")
-        ttk.Scale(frame, from_=0, to=180, orient="horizontal", variable=self.left_brow_var).grid(
+        ttk.Scale(frame, from_=45, to=135, orient="horizontal", variable=self.left_brow_var).grid(
             row=0, column=1, sticky="ew", padx=(8, 0)
         )
         ttk.Label(frame, text="Right").grid(row=1, column=0, sticky="w", pady=(6, 0))
-        ttk.Scale(frame, from_=0, to=180, orient="horizontal", variable=self.right_brow_var).grid(
+        ttk.Scale(frame, from_=45, to=135, orient="horizontal", variable=self.right_brow_var).grid(
             row=1, column=1, sticky="ew", padx=(8, 0), pady=(6, 0)
         )
         ttk.Button(frame, text="Apply Eyebrows", command=self._send_eyebrows).grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
@@ -440,8 +440,8 @@ class ControlLabApp:
         self._send_line("EMO:0,0,0,0,0,0,0,0")
 
     def _send_eyebrows(self) -> None:
-        left = int(self.left_brow_var.get())
-        right = int(self.right_brow_var.get())
+        left = max(45, min(135, int(self.left_brow_var.get())))
+        right = max(45, min(135, int(self.right_brow_var.get())))
         self._send_line(f"BROW:{left},{right}")
 
     def _send_pan_angle(self) -> None:

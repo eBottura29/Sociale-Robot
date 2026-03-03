@@ -29,8 +29,8 @@ def load_eyebrow_angles(emotions: list[str]) -> dict[str, tuple[int, int]]:
         value = raw.get(key)
         if isinstance(value, list) and len(value) >= 2:
             try:
-                left = max(0, min(180, int(value[0])))
-                right = max(0, min(180, int(value[1])))
+                left = max(45, min(135, int(value[0])))
+                right = max(45, min(135, int(value[1])))
                 result[emotion] = (left, right)
             except (TypeError, ValueError):
                 result[emotion] = (90, 90)
@@ -42,6 +42,6 @@ def browmap_command_for_emotion(emotion: str, emotions: list[str], angles: dict[
         return None
     index = emotions.index(emotion)
     left, right = angles.get(emotion, (90, 90))
-    left = max(0, min(180, int(left)))
-    right = max(0, min(180, int(right)))
+    left = max(45, min(135, int(left)))
+    right = max(45, min(135, int(right)))
     return f"BROWMAP:{index},{left},{right}"

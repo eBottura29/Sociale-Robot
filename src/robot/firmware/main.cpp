@@ -43,12 +43,12 @@ static inline void compatSetRGBLed(int r, int g, int b) {
 // - MOVE:<left>,<right>                 left/right = -255..255
 // - LCD:<text>                          tekst op LCD
 // - EMO:<h>,<fat>,<hun>,<sad>,<anx>,<aff>,<cur>,<fru>   0..100
-// - BROW:<leftAngle>,<rightAngle>       0..180
+// - BROW:<leftAngle>,<rightAngle>       45..135
 // - PAN:AUTO / PAN:MANUAL               sonar pan servo mode
 // - PAN:<angle>                          set pan angle in MANUAL mode
 // - RGB:<r>,<g>,<b>                      0..255
 // - BUZZER:ON,<pitch> / BUZZER:OFF       pitch in Hz (100..5000)
-// - BROWMAP:<emotionIndex>,<left>,<right>  emotionIndex=0..7, angles 0..180
+// - BROWMAP:<emotionIndex>,<left>,<right>  emotionIndex=0..7, angles 45..135
 // - MATRIX:<segment>,<row0>..<row7>      segment=0..3, each row byte 0..255
 //
 // Robot -> PC
@@ -162,8 +162,8 @@ Servo servo4;  // pin 18: eyebrow left
 Servo servo5;  // pin 17: eyebrow right
 
 void setEyebrowAngles(int leftAngle, int rightAngle) {
-  eyebrowLeftAngle = constrain(leftAngle, 0, 180);
-  eyebrowRightAngle = constrain(rightAngle, 0, 180);
+  eyebrowLeftAngle = constrain(leftAngle, 45, 135);
+  eyebrowRightAngle = constrain(rightAngle, 45, 135);
   if (servo4.attached()) {
     servo4.write(eyebrowLeftAngle);
   }
@@ -677,8 +677,8 @@ void handleLine(String line) {
       int leftAngle = payload.substring(first + 1, second).toInt();
       int rightAngle = payload.substring(second + 1).toInt();
       if (emoIndex >= 0 && emoIndex < EMO_COUNT) {
-        emotionEyebrowAngles[emoIndex][0] = constrain(leftAngle, 0, 180);
-        emotionEyebrowAngles[emoIndex][1] = constrain(rightAngle, 0, 180);
+        emotionEyebrowAngles[emoIndex][0] = constrain(leftAngle, 45, 135);
+        emotionEyebrowAngles[emoIndex][1] = constrain(rightAngle, 45, 135);
         Serial.println(F("ACK:BROWMAP"));
       }
     }

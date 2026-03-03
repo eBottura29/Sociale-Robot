@@ -116,7 +116,7 @@ def default_settings() -> dict:
                     "FATIGUE": [75, 105],
                     "HUNGER": [85, 95],
                     "SADNESS": [65, 115],
-                    "ANXIETY": [140, 40],
+                    "ANXIETY": [135, 45],
                     "AFFECTION": [110, 70],
                     "CURIOSITY": [130, 50],
                     "FRUSTRATION": [45, 135],
