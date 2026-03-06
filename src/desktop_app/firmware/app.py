@@ -9,7 +9,8 @@ from tkinter import ttk
 
 import serial
 
-from config import EMOTIONS
+from config import EMOTION_BUZZER_ENABLED, EMOTION_BUZZER_MIN_INTENSITY, EMOTIONS, PAN_AUTO_SPEED_MS
+from emotion_output_store import load_emotion_buzzer_pitch_map, load_emotion_rgb_map
 from emotions import EmotionEngine
 from eyebrow_store import browmap_command_for_emotion, load_eyebrow_angles
 from led_matrix_store import load_led_matrix_patterns, matrix_commands_for_emotion
@@ -43,17 +44,24 @@ class NierDesktopApp:
 
         self.navigation_enabled = False
         self.sonar_enabled = True
+        self.emotion_buzzer_enabled_var = tk.BooleanVar(value=EMOTION_BUZZER_ENABLED)
         self.nav_until = 0.0
         self.nav_left = 0
         self.nav_right = 0
         self.nav_last_cmd = 0.0
         self.nav_cmd_interval = 0.4
+        self.pan_auto_after_id = None
+        self.pan_auto_target_angle = 20
+        self.pan_auto_speed_ms = max(40, min(600, int(PAN_AUTO_SPEED_MS)))
 
         self.serial = SerialManager(debug_cb=self._on_serial_tx_debug)
         self.llm = LlmEngine(debug_cb=self._on_llm_debug)
         self.emotions = EmotionEngine()
         self.matrix_patterns = load_led_matrix_patterns(EMOTIONS)
         self.eyebrow_angles = load_eyebrow_angles(EMOTIONS)
+        self.emotion_rgb_map = load_emotion_rgb_map(EMOTIONS)
+        self.emotion_buzzer_pitch_map = load_emotion_buzzer_pitch_map(EMOTIONS)
+        self.emotion_buzzer_min_intensity = max(0, min(100, int(EMOTION_BUZZER_MIN_INTENSITY)))
 
         self._build_style()
         self._build_layout()
@@ -221,6 +229,13 @@ class NierDesktopApp:
             command=self._on_sonar_toggle,
         )
         self.sonar_switch.grid(row=4, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        self.emotion_buzzer_switch = ttk.Checkbutton(
+            connection,
+            text="Emotie-buzzer",
+            variable=self.emotion_buzzer_enabled_var,
+            command=self._on_emotion_buzzer_toggle,
+        )
+        self.emotion_buzzer_switch.grid(row=5, column=0, columnspan=3, sticky="w", pady=(4, 0))
 
         llm_frame = ttk.Labelframe(status_frame, text="LLM status", style="Section.TLabelframe")
         llm_frame.grid(row=1, column=0, sticky="ew", pady=(0, 8))
@@ -348,13 +363,24 @@ class NierDesktopApp:
         if self.connected and self.serial.serial_port:
             self._send_line(f"LCD:{self._truncate_for_serial(response)}")
             dominant = max(EMOTIONS, key=lambda name: emotions.get(name, 0))
+            dominant_intensity = int(emotions.get(dominant, 0))
             browmap_cmd = browmap_command_for_emotion(dominant, EMOTIONS, self.eyebrow_angles)
             if browmap_cmd:
                 self._send_line(browmap_cmd)
             for matrix_cmd in matrix_commands_for_emotion(dominant, self.matrix_patterns):
                 self._send_line(matrix_cmd)
+            rgb = self.emotion_rgb_map.get(dominant, (0, 0, 0))
+            self._send_line(f"RGB:{rgb[0]},{rgb[1]},{rgb[2]}")
+            if self.emotion_buzzer_enabled_var.get():
+                pitch = int(self.emotion_buzzer_pitch_map.get(dominant, 0))
+                if pitch > 0 and dominant_intensity >= self.emotion_buzzer_min_intensity:
+                    self._send_line(f"BUZZER:ON,{pitch}")
+                else:
+                    self._send_line("BUZZER:OFF")
+            else:
+                self._send_line("BUZZER:OFF")
             self._send_line(f"EMO:{self._serialize_emotions(emotions)}")
-            self._set_telemetry("Laatste Commando", "LCD/EMO")
+            self._set_telemetry("Laatste Commando", "LCD/EMO/RGB/BUZZER")
         else:
             self._set_telemetry("Laatste Commando", "-")
         self._set_llm_status("Idle", "Wacht op gebruiker")
@@ -494,6 +520,7 @@ class NierDesktopApp:
         self._send_line("HELLO")
         self._send_line("SONAR:ON" if self.sonar_enabled else "SONAR:OFF")
         self._set_telemetry("Sonar Status", "AAN" if self.sonar_enabled else "UIT")
+        self._start_pan_auto_loop()
         if not self.navigation_enabled:
             self._send_line("STOP")
             self._set_telemetry("Navigatie Modus", "AUTO (OFF)")
@@ -505,6 +532,7 @@ class NierDesktopApp:
         self.connect_button.configure(text="Verbinden")
         self.connection_status.configure(text="Status: Offline")
         self.logger.log("DISCONNECT", "Verbinding verbroken")
+        self._stop_pan_auto_loop()
         self._safe_stop()
 
 
@@ -625,6 +653,11 @@ class NierDesktopApp:
                 self._send_line("STOP")
                 self._set_telemetry("Laatste Commando", "STOP")
 
+        if self.sonar_enabled:
+            self._start_pan_auto_loop()
+        else:
+            self._stop_pan_auto_loop()
+
         if not self.sonar_enabled:
             self._set_telemetry("Sonar Links", "0 cm")
             self._set_telemetry("Sonar Rechts", "0 cm")
@@ -637,6 +670,11 @@ class NierDesktopApp:
         if self.navigation_enabled:
             self._set_telemetry("Navigatie Modus", "AUTO (ON)")
         self.logger.log("SONAR", "Sonar ingeschakeld")
+
+    def _on_emotion_buzzer_toggle(self) -> None:
+        if not self.emotion_buzzer_enabled_var.get() and self.connected and self.serial.serial_port:
+            self._send_line("BUZZER:OFF")
+            self.logger.log("TX", "BUZZER:OFF")
 
 
     def _poll_serial(self) -> None:
@@ -854,9 +892,31 @@ class NierDesktopApp:
 
 
     def _on_close(self) -> None:
+        self._stop_pan_auto_loop()
         self._safe_stop()
         self.logger.log("APP_STOP", "Desktop app afgesloten")
         self.root.destroy()
+
+    def _start_pan_auto_loop(self) -> None:
+        if not self.connected or not self.serial.serial_port or not self.sonar_enabled:
+            return
+        self._stop_pan_auto_loop()
+        self._send_line("PAN:MANUAL")
+        self.pan_auto_target_angle = 160
+        self._tick_pan_auto_loop()
+
+    def _stop_pan_auto_loop(self) -> None:
+        if self.pan_auto_after_id is not None:
+            self.root.after_cancel(self.pan_auto_after_id)
+            self.pan_auto_after_id = None
+
+    def _tick_pan_auto_loop(self) -> None:
+        if not self.connected or not self.serial.serial_port or not self.sonar_enabled:
+            self.pan_auto_after_id = None
+            return
+        self._send_line(f"PAN:{self.pan_auto_target_angle}")
+        self.pan_auto_target_angle = 20 if self.pan_auto_target_angle >= 160 else 160
+        self.pan_auto_after_id = self.root.after(self.pan_auto_speed_ms, self._tick_pan_auto_loop)
 
 
 class AppLogger:

@@ -13,6 +13,11 @@ from settings import get_by_path, load_settings, save_settings, set_by_path
 FIELD_SPECS = [
     ("Desktop: Serial Baud", "desktop_app.serial.baud", int),
     ("Desktop: Serial Timeout", "desktop_app.serial.timeout", float),
+    ("Desktop: Pan Auto Speed ms", "desktop_app.pan_auto_speed_ms", int),
+    ("Desktop: Emotion Buzzer Enabled", "desktop_app.emotion_buzzer_enabled", bool),
+    ("Desktop: Emotion Buzzer Min Intensity", "desktop_app.emotion_buzzer_min_intensity", int),
+    ("Control Lab: Pan Auto Speed ms", "desktop_app.control_lab.default_pan_auto_speed_ms", int),
+    ("Control Lab: Emotion Buzzer Enabled", "desktop_app.control_lab.default_emotion_buzzer_enabled", bool),
     ("Desktop: LLM Model", "desktop_app.llm.model_name", str),
     ("Desktop: Sentiment Model", "desktop_app.llm.sentiment_model_name", str),
     ("Desktop: Allow Download", "desktop_app.llm.allow_download", bool),

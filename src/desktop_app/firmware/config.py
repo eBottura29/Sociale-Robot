@@ -41,5 +41,8 @@ LLM_TOP_P = float(_LLM.get("top_p", 0.9))
 
 SERIAL_BAUD = int(_SERIAL.get("baud", 9600))
 SERIAL_TIMEOUT = float(_SERIAL.get("timeout", 0.1))
+PAN_AUTO_SPEED_MS = int(_DESKTOP.get("pan_auto_speed_ms", 120))
+EMOTION_BUZZER_ENABLED = bool(_DESKTOP.get("emotion_buzzer_enabled", True))
+EMOTION_BUZZER_MIN_INTENSITY = int(_DESKTOP.get("emotion_buzzer_min_intensity", 35))
 
 CONTROL_LAB_DEFAULTS = dict(_DESKTOP.get("control_lab", {}))

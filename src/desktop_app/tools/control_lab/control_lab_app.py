@@ -11,7 +11,8 @@ FIRMWARE_ROOT = Path(__file__).resolve().parents[2] / "firmware"
 if str(FIRMWARE_ROOT) not in sys.path:
     sys.path.insert(0, str(FIRMWARE_ROOT))
 
-from config import CONTROL_LAB_DEFAULTS, EMOTIONS
+from config import CONTROL_LAB_DEFAULTS, EMOTION_BUZZER_ENABLED, EMOTIONS, PAN_AUTO_SPEED_MS
+from emotion_output_store import load_emotion_buzzer_pitch_map, load_emotion_rgb_map
 from eyebrow_store import browmap_command_for_emotion, load_eyebrow_angles
 from led_matrix_store import load_led_matrix_patterns, matrix_commands_for_emotion
 from serial_client import SerialManager
@@ -37,9 +38,15 @@ class ControlLabApp:
         self.sonar_enabled = tk.BooleanVar(value=True)
         self.pan_auto = tk.BooleanVar(value=True)
         self.buzzer_enabled = tk.BooleanVar(value=False)
+        self.emotion_buzzer_enabled = tk.BooleanVar(
+            value=bool(CONTROL_LAB_DEFAULTS.get("default_emotion_buzzer_enabled", EMOTION_BUZZER_ENABLED))
+        )
 
         self.speed_var = tk.IntVar(value=int(CONTROL_LAB_DEFAULTS.get("default_drive_speed", 80)))
         self.pan_angle_var = tk.IntVar(value=int(CONTROL_LAB_DEFAULTS.get("default_pan_angle", 90)))
+        self.pan_auto_speed_var = tk.IntVar(
+            value=int(CONTROL_LAB_DEFAULTS.get("default_pan_auto_speed_ms", PAN_AUTO_SPEED_MS))
+        )
         self.emo_name_var = tk.StringVar(value=EMOTIONS[0])
         self.emo_intensity_var = tk.IntVar(value=int(CONTROL_LAB_DEFAULTS.get("default_emotion_intensity", 70)))
         self.left_brow_var = tk.IntVar(value=int(CONTROL_LAB_DEFAULTS.get("default_brow_left", 90)))
@@ -54,10 +61,14 @@ class ControlLabApp:
         self.telemetry_vars: dict[str, tk.StringVar] = {}
         self.last_drive = None
         self.last_drive_sent_at = 0.0
+        self.pan_auto_after_id = None
+        self.pan_auto_target_angle = 20
 
         self.keybinds = self._load_keybinds()
         self.matrix_patterns = load_led_matrix_patterns(EMOTIONS)
         self.eyebrow_angles = load_eyebrow_angles(EMOTIONS)
+        self.emotion_rgb_map = load_emotion_rgb_map(EMOTIONS)
+        self.emotion_buzzer_pitch_map = load_emotion_buzzer_pitch_map(EMOTIONS)
 
         self._build_style()
         self._build_ui()
@@ -191,6 +202,9 @@ class ControlLabApp:
         btns.grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
         ttk.Button(btns, text="Apply Emotion", command=self._send_emotion).grid(row=0, column=0)
         ttk.Button(btns, text="Clear Emotions", command=self._clear_emotions).grid(row=0, column=1, padx=(8, 0))
+        ttk.Checkbutton(frame, text="Buzzer from emotion", variable=self.emotion_buzzer_enabled).grid(
+            row=3, column=0, columnspan=2, sticky="w", pady=(6, 0)
+        )
 
     def _build_eyebrows(self, parent: ttk.Frame) -> None:
         frame = ttk.Labelframe(parent, text="Eyebrows", style="Section.TLabelframe")
@@ -216,8 +230,14 @@ class ControlLabApp:
         ttk.Label(frame, text="Manual angle").grid(row=1, column=0, sticky="w", pady=(6, 0))
         self.pan_scale = ttk.Scale(frame, from_=0, to=180, orient="horizontal", variable=self.pan_angle_var)
         self.pan_scale.grid(row=1, column=1, sticky="ew", padx=(8, 0), pady=(6, 0))
+        ttk.Label(frame, text="Auto speed (ms per sweep step, lower=faster)").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        self.pan_auto_speed_scale = ttk.Scale(frame, from_=40, to=600, orient="horizontal", variable=self.pan_auto_speed_var)
+        self.pan_auto_speed_scale.grid(row=2, column=1, sticky="ew", padx=(8, 0), pady=(6, 0))
+        ttk.Label(frame, text="Manual mode sends full speed: 0=left, 90=stop, 180=right").grid(
+            row=3, column=0, columnspan=2, sticky="w"
+        )
         self.pan_btn = ttk.Button(frame, text="Apply Pan Angle", command=self._send_pan_angle)
-        self.pan_btn.grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        self.pan_btn.grid(row=4, column=0, columnspan=2, sticky="w", pady=(8, 0))
         self._sync_pan_widgets()
 
     def _build_rgb(self, parent: ttk.Frame) -> None:
@@ -390,10 +410,11 @@ class ControlLabApp:
         self._reset_telemetry()
         self._send_line("HELLO")
         self._send_line("SONAR:ON" if self.sonar_enabled.get() else "SONAR:OFF")
-        self._send_line("PAN:AUTO" if self.pan_auto.get() else "PAN:MANUAL")
+        self._on_pan_mode_toggle()
         self._poll_serial()
 
     def _disconnect(self) -> None:
+        self._stop_pan_auto_loop()
         self._send_stop()
         if self.poll_after_id:
             self.root.after_cancel(self.poll_after_id)
@@ -410,11 +431,18 @@ class ControlLabApp:
     def _on_sonar_toggle(self) -> None:
         self._set_t("Sonar Status", "AAN" if self.sonar_enabled.get() else "UIT")
         self._send_line("SONAR:ON" if self.sonar_enabled.get() else "SONAR:OFF")
+        if self.sonar_enabled.get():
+            if self.pan_auto.get():
+                self._start_pan_auto_loop()
+        else:
+            self._stop_pan_auto_loop()
 
     def _on_pan_mode_toggle(self) -> None:
+        self._stop_pan_auto_loop()
         self._sync_pan_widgets()
         if self.pan_auto.get():
-            self._send_line("PAN:AUTO")
+            self._send_line("PAN:MANUAL")
+            self._start_pan_auto_loop()
         else:
             self._send_line("PAN:MANUAL")
             self._send_pan_angle()
@@ -427,13 +455,24 @@ class ControlLabApp:
     def _send_emotion(self) -> None:
         values = {name: 0 for name in EMOTIONS}
         emotion_name = self.emo_name_var.get()
-        values[emotion_name] = int(self.emo_intensity_var.get())
+        intensity = int(self.emo_intensity_var.get())
+        values[emotion_name] = intensity
         payload = ",".join(str(values[name]) for name in EMOTIONS)
         browmap_cmd = browmap_command_for_emotion(emotion_name, EMOTIONS, self.eyebrow_angles)
         if browmap_cmd:
             self._send_line(browmap_cmd)
         for matrix_cmd in matrix_commands_for_emotion(emotion_name, self.matrix_patterns):
             self._send_line(matrix_cmd)
+        rgb = self.emotion_rgb_map.get(emotion_name, (0, 0, 0))
+        self._send_line(f"RGB:{rgb[0]},{rgb[1]},{rgb[2]}")
+        if self.emotion_buzzer_enabled.get():
+            pitch = int(self.emotion_buzzer_pitch_map.get(emotion_name, 0))
+            if pitch > 0 and intensity > 0:
+                self._send_line(f"BUZZER:ON,{pitch}")
+            else:
+                self._send_line("BUZZER:OFF")
+        else:
+            self._send_line("BUZZER:OFF")
         self._send_line(f"EMO:{payload}")
 
     def _clear_emotions(self) -> None:
@@ -447,7 +486,41 @@ class ControlLabApp:
     def _send_pan_angle(self) -> None:
         if self.pan_auto.get():
             return
-        self._send_line(f"PAN:{int(self.pan_angle_var.get())}")
+        # Firmware only accepts PAN:<angle>; for continuous top-servo use
+        # extremes to force max speed and center to stop.
+        requested = int(self.pan_angle_var.get())
+        if requested <= 85:
+            target = 0
+        elif requested >= 95:
+            target = 180
+        else:
+            target = 90
+        self._send_line(f"PAN:{target}")
+
+    def _clamped_pan_auto_speed(self) -> int:
+        raw = int(self.pan_auto_speed_var.get())
+        return max(40, min(600, raw))
+
+    def _start_pan_auto_loop(self) -> None:
+        if not self.connected or not self.serial.serial_port or not self.pan_auto.get() or not self.sonar_enabled.get():
+            return
+        self._stop_pan_auto_loop()
+        self.pan_auto_target_angle = 160
+        self._tick_pan_auto_loop()
+
+    def _stop_pan_auto_loop(self) -> None:
+        if self.pan_auto_after_id is not None:
+            self.root.after_cancel(self.pan_auto_after_id)
+            self.pan_auto_after_id = None
+
+    def _tick_pan_auto_loop(self) -> None:
+        if not self.connected or not self.serial.serial_port or not self.pan_auto.get() or not self.sonar_enabled.get():
+            self.pan_auto_after_id = None
+            return
+        self._send_line(f"PAN:{self.pan_auto_target_angle}")
+        self.pan_auto_target_angle = 20 if self.pan_auto_target_angle >= 160 else 160
+        delay_ms = self._clamped_pan_auto_speed()
+        self.pan_auto_after_id = self.root.after(delay_ms, self._tick_pan_auto_loop)
 
     def _send_rgb(self) -> None:
         r = int(self.rgb_r_var.get())
@@ -622,6 +695,7 @@ class ControlLabApp:
             self.port_var.set(ports[0])
 
     def on_close(self) -> None:
+        self._stop_pan_auto_loop()
         self._disconnect()
         self.root.destroy()
 
