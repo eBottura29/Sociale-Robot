@@ -7,9 +7,9 @@ import serial
 import tkinter as tk
 from tkinter import ttk
 
-APP_ROOT = Path(__file__).resolve().parents[2]
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
+FIRMWARE_ROOT = Path(__file__).resolve().parents[2] / "firmware"
+if str(FIRMWARE_ROOT) not in sys.path:
+    sys.path.insert(0, str(FIRMWARE_ROOT))
 
 from config import CONTROL_LAB_DEFAULTS, EMOTIONS
 from eyebrow_store import browmap_command_for_emotion, load_eyebrow_angles

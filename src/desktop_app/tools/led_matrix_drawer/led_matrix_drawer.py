@@ -4,9 +4,9 @@ from pathlib import Path
 from tkinter import ttk
 
 
-APP_ROOT = Path(__file__).resolve().parents[2]
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
+FIRMWARE_ROOT = Path(__file__).resolve().parents[2] / "firmware"
+if str(FIRMWARE_ROOT) not in sys.path:
+    sys.path.insert(0, str(FIRMWARE_ROOT))
 
 from config import EMOTIONS
 from led_matrix_store import (

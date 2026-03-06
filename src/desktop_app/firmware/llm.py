@@ -129,7 +129,7 @@ class LlmEngine:
         if env_token:
             return env_token.strip()
         try:
-            base_dir = Path(__file__).resolve().parents[2]
+            base_dir = Path(__file__).resolve().parents[3]
             token_path = base_dir / ".hf_token"
             if token_path.exists():
                 token = token_path.read_text(encoding="utf-8").strip()

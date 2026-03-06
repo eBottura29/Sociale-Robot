@@ -22,6 +22,7 @@
 - [Software Componenten](#software-componenten)
 - [Installatie](#installatie)
 - [Gebruik](#gebruik)
+- [Project Structuur](#project-structuur)
 - [Creatieve Ideeen & Toekomstige Uitbreidingen](#creatieve-ideeen--toekomstige-uitbreidingen)
 - [Technische Overwegingen](#technische-overwegingen)
 - [Team](#team)
@@ -294,7 +295,7 @@ sentencepiece>=0.1.99
 **Hugging Face token (voor gated modellen):**
 1. Vraag toegang aan op de modelpagina (bijv. Llama 3.2).
 2. Zet je token in `.hf_token` (repo root), alleen de token-string.
-3. Zorg dat `LLM_ALLOW_DOWNLOAD = True` staat in `src/desktop_app/config.py`.
+3. Zorg dat `LLM_ALLOW_DOWNLOAD = True` staat in `src/desktop_app/firmware/config.py`.
 
 ### Robot Setup
 
@@ -317,7 +318,7 @@ sentencepiece>=0.1.99
 
 ### 2. Start de Desktop App
 ```bash
-python src/desktop_app/main.py
+python src/desktop_app/firmware/main.py
 ```
 
 ### 3. Selecteer COM Poort
@@ -339,6 +340,26 @@ python src/desktop_app/main.py
 - **Serial Monitor** (op blockly.dwengo.org): Bekijk debug info
 - **Desktop App**: Zie conversatie en emotie scores
 - **RGB LED**: Toont systeem status
+
+---
+
+## Project Structuur
+
+```text
+docs/
+  competition/                -> Wedstrijd documenten (PDF)
+src/
+  desktop_app/
+    firmware/                 -> Hoofd desktop app code (run: main.py)
+    tools/                    -> Desktop test/tools (control lab, matrix drawer, legacy test)
+    experiments/              -> Prototypes en tijdelijke experimenten
+  robot/
+    firmware/                 -> Hoofd Dwenguino firmware
+    tools/                    -> Robot-side test/tools
+    experiments/              -> Robot prototypes/experimenten
+  settings/                   -> Centrale settings loader + settings.json
+logs/                         -> Runtime logs (automatisch)
+```
 
 ---
 

@@ -11,11 +11,11 @@ Use these paths as your reference when reading or modifying the project.
 
 - `src/desktop_app/` Python desktop app (GUI, LLM, emotions, serial, navigation).
 - `src/robot/firmware/main.cpp` Robot firmware for Dwenguino.
-- `src/robot/accessory_apps/legacy_hardware_suite/hardware_test.cpp` Full staged hardware test sketch.
-- `src/robot/accessory_apps/legacy_hardware_suite/HARDWARE_TEST.md` Expected outcomes and troubleshooting for the hardware test.
-- `src/robot/accessory_apps/control_lab/README.md` Control Lab robot-side protocol notes.
-- `src/desktop_app/accessory_apps/control_lab/control_lab_app.py` Interactive control/testing desktop tool.
-- `src/robot/prototyping/` Older one-off experiments and prototype sketches.
+- `src/robot/tools/legacy_hardware_suite/hardware_test.cpp` Full staged hardware test sketch.
+- `src/robot/tools/legacy_hardware_suite/HARDWARE_TEST.md` Expected outcomes and troubleshooting for the hardware test.
+- `src/robot/tools/control_lab/README.md` Control Lab robot-side protocol notes.
+- `src/desktop_app/tools/control_lab/control_lab_app.py` Interactive control/testing desktop tool.
+- `src/robot/experiments/` Older one-off experiments and prototype sketches.
 - `src/robot/docs/documentation.md` This document.
 - `requirements.txt` Python dependencies.
 - `.hf_token` Hugging Face token (not committed).
@@ -92,8 +92,8 @@ The firmware is in `src/robot/firmware/main.cpp`.
 
 Use this before demo day or after rewiring:
 
-- Flash `src/robot/accessory_apps/legacy_hardware_suite/hardware_test.cpp`
-- Follow `src/robot/accessory_apps/legacy_hardware_suite/HARDWARE_TEST.md` for expected pass/fail behavior
+- Flash `src/robot/tools/legacy_hardware_suite/hardware_test.cpp`
+- Follow `src/robot/tools/legacy_hardware_suite/HARDWARE_TEST.md` for expected pass/fail behavior
 - Press `SW_C` to rerun the full test suite
 
 ---
@@ -113,7 +113,7 @@ python -m pip install -r requirements.txt
 ### 5.2 Run the app
 
 ```bash
-python src/desktop_app/main.py
+python src/desktop_app/firmware/main.py
 ```
 
 ### 5.3 Connect to the robot
@@ -151,7 +151,7 @@ The Llama models are gated. You must request access and authenticate.
 
 1. Go to the model page and request access.
 2. Put your HF token in `.hf_token` in the repo root.
-3. Make sure `LLM_ALLOW_DOWNLOAD = True` in `src/desktop_app/config.py`.
+3. Make sure `LLM_ALLOW_DOWNLOAD = True` in `src/desktop_app/firmware/config.py`.
 
 `.hf_token` format:
 
@@ -161,7 +161,7 @@ hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 ### 6.2 Change model
 
-Edit `src/desktop_app/config.py`:
+Edit `src/desktop_app/firmware/config.py`:
 
 ```python
 LLM_MODEL_NAME = "meta-llama/Llama-3.2-3B-Instruct"

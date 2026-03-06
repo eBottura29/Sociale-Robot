@@ -862,7 +862,7 @@ class NierDesktopApp:
 class AppLogger:
     def __init__(self) -> None:
         self.lock = threading.Lock()
-        base_dir = Path(__file__).resolve().parents[2]
+        base_dir = Path(__file__).resolve().parents[3]
         self.log_dir = base_dir / "logs"
         self.log_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

@@ -13,4 +13,4 @@ Run the editor from repository root:
 python src/settings/main.py
 ```
 
-Desktop app config values are loaded from this file via `src/desktop_app/config.py`.
+Desktop app config values are loaded from this file via `src/desktop_app/firmware/config.py`.

@@ -118,7 +118,7 @@ def run_monitor(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Terminal monitor for src/robot/accessory_apps/legacy_hardware_suite/hardware_test.cpp output."
+        description="Terminal monitor for src/robot/tools/legacy_hardware_suite/hardware_test.cpp output."
     )
     parser.add_argument("--port", help="Serial port (example: COM3)")
     parser.add_argument("--baud", type=int, default=9600, help="Baud rate (default: 9600)")
