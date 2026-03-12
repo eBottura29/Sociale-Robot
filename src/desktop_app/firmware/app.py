@@ -9,7 +9,7 @@ from tkinter import ttk
 
 import serial
 
-from config import EMOTION_BUZZER_ENABLED, EMOTION_BUZZER_MIN_INTENSITY, EMOTIONS, PAN_AUTO_SPEED_MS
+from config import CONTROL_LAB_DEFAULTS, EMOTION_BUZZER_ENABLED, EMOTION_BUZZER_MIN_INTENSITY, EMOTIONS, PAN_AUTO_SPEED_MS
 from emotion_output_store import load_emotion_buzzer_pitch_map, load_emotion_rgb_map
 from emotions import EmotionEngine
 from eyebrow_store import browmap_command_for_emotion, load_eyebrow_angles
@@ -45,6 +45,7 @@ class NierDesktopApp:
         self.navigation_enabled = False
         self.sonar_enabled = True
         self.emotion_buzzer_enabled_var = tk.BooleanVar(value=EMOTION_BUZZER_ENABLED)
+        self.drive_speed_var = tk.IntVar(value=int(CONTROL_LAB_DEFAULTS.get("default_drive_speed", 80)))
         self.nav_until = 0.0
         self.nav_left = 0
         self.nav_right = 0
@@ -236,6 +237,10 @@ class NierDesktopApp:
             command=self._on_emotion_buzzer_toggle,
         )
         self.emotion_buzzer_switch.grid(row=5, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        ttk.Label(connection, text="Rijsnelheid (wielen)").grid(row=6, column=0, sticky="w", pady=(8, 0))
+        ttk.Scale(connection, from_=30, to=255, orient="horizontal", variable=self.drive_speed_var).grid(
+            row=6, column=1, columnspan=2, sticky="ew", padx=(8, 0), pady=(8, 0)
+        )
 
         llm_frame = ttk.Labelframe(status_frame, text="LLM status", style="Section.TLabelframe")
         llm_frame.grid(row=1, column=0, sticky="ew", pady=(0, 8))
@@ -592,33 +597,37 @@ class NierDesktopApp:
         right = sonar_right if sonar_right > 0 else 999
         closest = min(left, right)
         now = time.time()
+        speed = max(30, min(255, int(self.drive_speed_var.get())))
+        turn_speed = max(20, min(255, speed))
+        slow_speed = max(15, speed // 2)
+        forward_speed = max(20, min(255, int(speed * 0.7)))
 
         if closest <= 20:
             if left < right:
-                self._send_move(-40, 40)
+                self._send_move(-turn_speed, turn_speed)
             else:
-                self._send_move(40, -40)
+                self._send_move(turn_speed, -turn_speed)
             self._set_telemetry("Navigatie Modus", "AVOID")
             return
 
         if closest <= 60:
             if left < right:
-                self._send_move(25, 45)
+                self._send_move(slow_speed, turn_speed)
             else:
-                self._send_move(45, 25)
+                self._send_move(turn_speed, slow_speed)
             self._set_telemetry("Navigatie Modus", "APPROACH")
             return
 
         if now >= self.nav_until:
             choice = random.choice(["FORWARD", "TURN_L", "TURN_R"])
             if choice == "FORWARD":
-                self.nav_left, self.nav_right = 35, 35
+                self.nav_left, self.nav_right = forward_speed, forward_speed
                 self.nav_until = now + 1.2
             elif choice == "TURN_L":
-                self.nav_left, self.nav_right = -30, 30
+                self.nav_left, self.nav_right = -turn_speed, turn_speed
                 self.nav_until = now + 0.8
             else:
-                self.nav_left, self.nav_right = 30, -30
+                self.nav_left, self.nav_right = turn_speed, -turn_speed
                 self.nav_until = now + 0.8
         self._send_move(self.nav_left, self.nav_right)
         self._set_telemetry("Navigatie Modus", "SEARCH")
