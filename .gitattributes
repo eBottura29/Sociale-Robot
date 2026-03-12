@@ -1,0 +1,11 @@
+# Generated build artifacts (PyInstaller / releases / logs)
+build/**                   linguist-generated
+dist/**                    linguist-generated
+release/**                 linguist-generated
+logs/**                    linguist-generated
+
+# PyInstaller metadata/archives (in case they appear outside the folders above)
+**/*.toc                   linguist-generated
+**/*.pyz                   linguist-generated
+**/*.pkg                   linguist-generated
+**/*.pyc                   linguist-generated
