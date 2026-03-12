@@ -11,3 +11,8 @@ __pycache__/
 
 # Logs directory
 logs/
+
+# Builds and releases
+nier.exe
+release/
+build/nier/nier.pkg
