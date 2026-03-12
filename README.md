@@ -3,7 +3,7 @@
 [![Dwenguino](https://img.shields.io/badge/Platform-Dwenguino-orange)](https://www.dwengo.org/)
 [![Arduino](https://img.shields.io/badge/Arduino-Compatible-blue)](https://www.arduino.cc/)
 [![Python](https://img.shields.io/badge/Python-3.8+-green)](https://www.python.org/)
-[![Status](https://img.shields.io/badge/Status-In%20Development-yellow)]()
+[![Version](https://img.shields.io/badge/Version-1.0-brightgreen)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **NIER** (Neural Interactive Emotional Robot) is een intelligente sociale robot gebouwd met Dwenguino die eenzaamheid helpt bestrijden door middel van AI-gestuurde conversaties, emotionele intelligentie en autonome navigatie.
@@ -292,9 +292,23 @@ torch>=2.0.0
 sentencepiece>=0.1.99
 ```
 
+### Windows EXE build (Desktop App)
+
+Maak een standalone `.exe` van de desktop app (firmware GUI). Gebruik de meegeleverde `nier.spec`, die alle extra bundling (tkinter, settings, transformers) regelt.
+
+```bash
+python -m pip install pyinstaller
+pyinstaller nier.spec
+```
+
+Na build staat de app in `dist/nier.exe`. Kopieer hem naar de repo root als je dat wil:
+```bash
+copy dist\nier.exe .\
+```
+
 **Hugging Face token (voor gated modellen):**
 1. Vraag toegang aan op de modelpagina (bijv. Llama 3.2).
-2. Zet je token in `.hf_token` (repo root), alleen de token-string.
+2. Start de app en plak je token in de popup (wordt opgeslagen als `.hf_token` in de huidige map).
 3. Zorg dat `LLM_ALLOW_DOWNLOAD = True` staat in `src/desktop_app/firmware/config.py`.
 
 ### Robot Setup
@@ -320,6 +334,9 @@ sentencepiece>=0.1.99
 ```bash
 python src/desktop_app/firmware/main.py
 ```
+
+Bij de eerste keer starten vraagt de app om je Hugging Face token als er geen `.hf_token` in de huidige map staat.
+De app slaat die automatisch op als `.hf_token` in de huidige map.
 
 ### 3. Selecteer COM Poort
 - Kies correcte poort in de app (bijv. COM3, /dev/ttyUSB0)

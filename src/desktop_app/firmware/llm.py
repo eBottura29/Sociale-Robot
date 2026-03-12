@@ -1,6 +1,8 @@
+import os
 import random
 import threading
-import os
+import traceback
+import types
 from pathlib import Path
 
 from config import (
@@ -72,7 +74,9 @@ class LlmEngine:
                 return self._error_response()
             dutch = reply.split("\n")[0].strip()
             return self._truncate_reply(dutch)
-        except Exception:
+        except Exception as exc:
+            self._debug(f"LLM_ERROR: {exc}")
+            self._debug(f"TRACE:{traceback.format_exc()}")
             return self._error_response()
 
     def sentiment_score(self, text: str) -> int:
@@ -92,10 +96,16 @@ class LlmEngine:
         if self.models_ready or self.model_error:
             return
         try:
+            # Disable torch dynamo/compile paths inside packaged app to avoid torch._numpy issues.
+            os.environ.setdefault("TORCH_DISABLE_DYNAMO", "1")
+            os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
+            os.environ.setdefault("TORCH_COMPILE_DISABLE", "1")
+            self._install_torch_dynamo_stub()
             from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
         except Exception as exc:
             self.model_error = f"Transformers niet beschikbaar: {exc}"
             self._debug(self.model_error)
+            self._debug(f"TRACE:{traceback.format_exc()}")
             return
         try:
             local_only = not LLM_ALLOW_DOWNLOAD
@@ -123,19 +133,108 @@ class LlmEngine:
             else:
                 self.model_error = f"Model laden faalde: {exc}"
             self._debug(self.model_error)
+            self._debug(f"TRACE:{traceback.format_exc()}")
 
     def _load_hf_token(self) -> str:
         env_token = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN")
         if env_token:
             return env_token.strip()
         try:
-            base_dir = Path(__file__).resolve().parents[3]
-            token_path = base_dir / ".hf_token"
+            token_path = self._token_dir() / ".hf_token"
             if token_path.exists():
                 token = token_path.read_text(encoding="utf-8").strip()
                 return token
+            token = self._prompt_for_token(token_path)
+            if token:
+                return token
         except Exception:
             return ""
+        return ""
+
+    def _token_dir(self) -> Path:
+        return Path.cwd()
+
+    def _install_torch_dynamo_stub(self) -> None:
+        """Prevent torch._dynamo imports in frozen builds (avoids torch._numpy crash)."""
+        import sys
+
+        if "torch._dynamo" in sys.modules:
+            return
+
+        def _false() -> bool:
+            return False
+
+        def _disable(fn=None, recursive=False, reason=None, *args, **kwargs):
+            if fn is None:
+                def decorator(inner):
+                    return inner
+                return decorator
+            return fn
+
+        def _allow_in_graph(fn=None):
+            if fn is None:
+                def decorator(inner):
+                    return inner
+                return decorator
+            return fn
+
+        def _graph_break(*args, **kwargs):
+            return None
+
+        def _mark_dynamic(*args, **kwargs):
+            return None
+
+        def _mark_static(*args, **kwargs):
+            return None
+
+        dynamo_mod = types.ModuleType("torch._dynamo")
+        dynamo_mod.__path__ = []
+        dynamo_mod.is_compiling = _false
+        dynamo_mod.is_exporting = _false
+        dynamo_mod.disable = _disable
+        dynamo_mod.allow_in_graph = _allow_in_graph
+        dynamo_mod.graph_break = _graph_break
+        dynamo_mod.mark_dynamic = _mark_dynamic
+        dynamo_mod.mark_static = _mark_static
+        sys.modules.setdefault("torch._dynamo", dynamo_mod)
+
+        trace_mod = types.ModuleType("torch._dynamo._trace_wrapped_higher_order_op")
+
+        class TransformGetItemToIndex:
+            def __call__(self, *args, **kwargs):
+                return None
+
+        trace_mod.TransformGetItemToIndex = TransformGetItemToIndex
+        sys.modules.setdefault("torch._dynamo._trace_wrapped_higher_order_op", trace_mod)
+        dynamo_mod._trace_wrapped_higher_order_op = trace_mod
+
+    def _prompt_for_token(self, token_path: Path) -> str:
+        try:
+            import tkinter as tk
+            from tkinter import simpledialog
+        except Exception:
+            return ""
+        root = tk._default_root
+        temp_root = None
+        if root is None:
+            temp_root = tk.Tk()
+            temp_root.withdraw()
+            root = temp_root
+        try:
+            token = simpledialog.askstring(
+                "Hugging Face token",
+                "Plak je Hugging Face token.\n"
+                "Het wordt opgeslagen als .hf_token in de huidige map.",
+                parent=root,
+            )
+            if token:
+                token = token.strip()
+                if token:
+                    token_path.write_text(token, encoding="utf-8")
+                    return token
+        finally:
+            if temp_root is not None:
+                temp_root.destroy()
         return ""
 
     def _error_response(self) -> str:

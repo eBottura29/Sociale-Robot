@@ -4,7 +4,13 @@ import random
 from datetime import datetime
 from collections import deque
 from pathlib import Path
-import tkinter as tk
+import sys
+try:
+    import tkinter as tk
+except ModuleNotFoundError:
+    base_dir = Path(getattr(sys, "_MEIPASS", Path.cwd()))
+    sys.path.insert(0, str(base_dir))
+    import tkinter as tk
 from tkinter import ttk
 
 import serial
@@ -808,6 +814,9 @@ class NierDesktopApp:
         self.logger.log("TX", msg)
 
     def _on_llm_debug(self, msg: str) -> None:
+        if msg.startswith("TRACE:"):
+            self.logger.log("LLM_TRACE", msg[6:])
+            return
         self.root.after(0, lambda: self._set_debug("Laatste RX", msg))
         self._queue_llm_status("Busy", msg)
         self.logger.log("LLM", msg)
@@ -931,8 +940,7 @@ class NierDesktopApp:
 class AppLogger:
     def __init__(self) -> None:
         self.lock = threading.Lock()
-        base_dir = Path(__file__).resolve().parents[3]
-        self.log_dir = base_dir / "logs"
+        self.log_dir = Path.cwd() / "logs"
         self.log_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.log_path = self.log_dir / f"session_{timestamp}.log"

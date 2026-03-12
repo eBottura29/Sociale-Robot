@@ -1,12 +1,4 @@
-import sys
-from pathlib import Path
-
-
-SETTINGS_DIR = Path(__file__).resolve().parents[2] / "settings"
-if str(SETTINGS_DIR) not in sys.path:
-    sys.path.insert(0, str(SETTINGS_DIR))
-
-from settings import load_settings
+from settings_loader import load_settings
 
 
 _SETTINGS = load_settings()
