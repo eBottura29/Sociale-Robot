@@ -61,6 +61,8 @@ class ControlLabApp:
         self.telemetry_vars: dict[str, tk.StringVar] = {}
         self.last_drive = None
         self.last_drive_sent_at = 0.0
+        self.drive_keepalive_after_id = None
+        self.drive_keepalive_interval_ms = 120
         self.pan_auto_after_id = None
         self.pan_auto_target_angle = 20
 
@@ -415,6 +417,7 @@ class ControlLabApp:
 
     def _disconnect(self) -> None:
         self._stop_pan_auto_loop()
+        self._stop_drive_keepalive()
         self._send_stop()
         if self.poll_after_id:
             self.root.after_cancel(self.poll_after_id)
@@ -541,7 +544,39 @@ class ControlLabApp:
 
     def _send_stop(self) -> None:
         self.last_drive = None
+        self._stop_drive_keepalive()
         self._send_line("STOP")
+
+    def _stop_drive_keepalive(self) -> None:
+        if self.drive_keepalive_after_id is not None:
+            self.root.after_cancel(self.drive_keepalive_after_id)
+            self.drive_keepalive_after_id = None
+
+    def _send_drive(self, move, force: bool = False) -> None:
+        now = time.time()
+        if not force and move == self.last_drive and now - self.last_drive_sent_at < 0.12:
+            return
+        self.last_drive = move
+        self.last_drive_sent_at = now
+        if move == (0, 0):
+            self._send_line("STOP")
+        else:
+            self._send_line(f"MOVE:{move[0]},{move[1]}")
+
+    def _drive_keepalive_tick(self) -> None:
+        if not self.motion_enabled.get():
+            self.drive_keepalive_after_id = None
+            return
+        if not self.active_keys:
+            self.drive_keepalive_after_id = None
+            return
+        if self.last_drive and self.last_drive != (0, 0):
+            self._send_drive(self.last_drive, force=True)
+            self.drive_keepalive_after_id = self.root.after(
+                self.drive_keepalive_interval_ms, self._drive_keepalive_tick
+            )
+            return
+        self.drive_keepalive_after_id = None
 
     def _update_drive_from_keys(self) -> None:
         if not self.motion_enabled.get():
@@ -573,15 +608,15 @@ class ControlLabApp:
         elif right and not left:
             move = (speed, -speed)
 
-        now = time.time()
-        if move == self.last_drive and now - self.last_drive_sent_at < 0.12:
-            return
-        self.last_drive = move
-        self.last_drive_sent_at = now
         if move == (0, 0):
-            self._send_line("STOP")
-        else:
-            self._send_line(f"MOVE:{move[0]},{move[1]}")
+            self._send_drive(move)
+            self._stop_drive_keepalive()
+            return
+        self._send_drive(move)
+        if self.drive_keepalive_after_id is None:
+            self.drive_keepalive_after_id = self.root.after(
+                self.drive_keepalive_interval_ms, self._drive_keepalive_tick
+            )
 
     def _poll_serial(self) -> None:
         if not self.connected or not self.serial.serial_port:
@@ -695,8 +730,24 @@ class ControlLabApp:
             self.port_var.set(ports[0])
 
     def on_close(self) -> None:
+        # Shutdown should not block on serial writes.
         self._stop_pan_auto_loop()
-        self._disconnect()
+        self._stop_drive_keepalive()
+        if self.poll_after_id:
+            try:
+                self.root.after_cancel(self.poll_after_id)
+            except Exception:
+                pass
+            self.poll_after_id = None
+        try:
+            self.serial.disconnect()
+        except Exception:
+            pass
+        self.connected = False
+        try:
+            self.root.quit()
+        except Exception:
+            pass
         self.root.destroy()
 
 

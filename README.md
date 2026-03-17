@@ -3,7 +3,7 @@
 [![Dwenguino](https://img.shields.io/badge/Platform-Dwenguino-orange)](https://www.dwengo.org/)
 [![Arduino](https://img.shields.io/badge/Arduino-Compatible-blue)](https://www.arduino.cc/)
 [![Python](https://img.shields.io/badge/Python-3.8+-green)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-1.1-brightgreen)]()
+[![Version](https://img.shields.io/badge/Version-1.1.1-brightgreen)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **NIER** (Neural Interactive Emotional Robot) is een intelligente sociale robot gebouwd met Dwenguino die eenzaamheid helpt bestrijden door middel van AI-gestuurde conversaties, emotionele intelligentie en autonome navigatie.
@@ -310,7 +310,7 @@ copy dist\nier.exe .\
 
 Deze snelle start gebruikt de release-zip, zonder Python installatie.
 
-1. Download de release-zip `nier_v1.1.zip`.
+1. Download de release-zip `nier_v1.1.1.zip`.
 2. Pak de zip uit naar een map naar keuze.
 3. Start `nier.exe`.
 4. (Optioneel) Start `control_app.exe` voor hardware testen.
