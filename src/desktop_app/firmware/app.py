@@ -28,8 +28,12 @@ class NierDesktopApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("NIER Desktop App")
-        self.root.geometry("1100x780")
-        self.root.minsize(980, 700)
+        self.root.geometry("1040x720")
+        self.root.minsize(940, 660)
+        try:
+            self.root.state("zoomed")
+        except tk.TclError:
+            pass
 
         self.connected = False
         self.emotion_values = {name: 0 for name in EMOTIONS}
@@ -79,19 +83,21 @@ class NierDesktopApp:
     def _build_style(self) -> None:
         style = ttk.Style(self.root)
         style.theme_use("clam")
-        style.configure("Header.TLabel", font=("Segoe UI", 20, "bold"))
-        style.configure("Subheader.TLabel", font=("Segoe UI", 11))
-        style.configure("Section.TLabelframe", padding=8)
-        style.configure("Section.TLabelframe.Label", font=("Segoe UI", 11, "bold"))
-        style.configure("Primary.TButton", font=("Segoe UI", 10, "bold"))
-        style.configure("Chat.TText", font=("Consolas", 10))
+        style.configure("Header.TLabel", font=("Segoe UI", 18, "bold"))
+        style.configure("Subheader.TLabel", font=("Segoe UI", 10))
+        style.configure("Section.TLabelframe", padding=6)
+        style.configure("Section.TLabelframe.Label", font=("Segoe UI", 10, "bold"))
+        style.configure("Primary.TButton", font=("Segoe UI", 9, "bold"))
+        style.configure("Chat.TText", font=("Consolas", 9))
+        style.configure("Small.TCheckbutton", font=("Segoe UI", 9))
+        style.configure("Small.TLabel", font=("Segoe UI", 9))
 
 
     def _build_layout(self) -> None:
         root = self.root
         root.columnconfigure(0, weight=1)
 
-        header = ttk.Frame(root, padding=(18, 16, 0, 8))
+        header = ttk.Frame(root, padding=(14, 12, 0, 6))
         header.grid(row=0, column=0, sticky="ew")
         header.columnconfigure(0, weight=1)
 
@@ -104,7 +110,7 @@ class NierDesktopApp:
             style="Subheader.TLabel",
         ).grid(row=1, column=0, sticky="w", pady=(4, 0))
 
-        body = ttk.Frame(root, padding=(18, 8, 0, 18))
+        body = ttk.Frame(root, padding=(14, 6, 0, 14))
         body.grid(row=1, column=0, sticky="nsew")
         body.columnconfigure(0, weight=3)
         body.columnconfigure(1, weight=2)
@@ -144,8 +150,8 @@ class NierDesktopApp:
         self.response_label = ttk.Label(
             self.response_frame,
             text="...",
-            font=("Segoe UI", 11),
-            wraplength=520,
+            font=("Segoe UI", 10),
+            wraplength=480,
             justify="left",
         )
         self.response_label.grid(row=0, column=0, sticky="w", pady=(4, 4))
@@ -167,8 +173,8 @@ class NierDesktopApp:
         self.lcd_frame.grid(row=3, column=0, sticky="ew", pady=(12, 0))
         self.lcd_frame.columnconfigure(0, weight=1)
 
-        self.lcd_line1 = ttk.Label(self.lcd_frame, text=" " * 16, font=("Consolas", 12))
-        self.lcd_line2 = ttk.Label(self.lcd_frame, text=" " * 16, font=("Consolas", 12))
+        self.lcd_line1 = ttk.Label(self.lcd_frame, text=" " * 16, font=("Consolas", 11))
+        self.lcd_line2 = ttk.Label(self.lcd_frame, text=" " * 16, font=("Consolas", 11))
         self.lcd_line1.grid(row=0, column=0, sticky="w")
         self.lcd_line2.grid(row=1, column=0, sticky="w")
         self.lcd_frame.grid_remove()
@@ -200,7 +206,7 @@ class NierDesktopApp:
         connection.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         connection.columnconfigure(1, weight=1)
 
-        ttk.Label(connection, text="COM-poort").grid(row=0, column=0, sticky="w")
+        ttk.Label(connection, text="COM-poort", style="Small.TLabel").grid(row=0, column=0, sticky="w")
         self.port_var = tk.StringVar(value="")
         self.port_menu = ttk.OptionMenu(connection, self.port_var, "")
         self.port_menu.grid(row=0, column=1, sticky="ew", padx=(8, 0))
@@ -211,42 +217,61 @@ class NierDesktopApp:
         )
         self.connect_button.grid(row=1, column=0, pady=(8, 0), sticky="w")
 
-        self.connection_status = ttk.Label(connection, text="Status: Offline")
+        self.connection_status = ttk.Label(connection, text="Status: Offline", style="Small.TLabel")
         self.connection_status.grid(row=1, column=1, columnspan=2, sticky="w", padx=(8, 0), pady=(8, 0))
 
         self.reset_button = ttk.Button(connection, text="Reset", command=self._send_reset)
         self.reset_button.grid(row=2, column=0, pady=(6, 0), sticky="w")
-        self.reset_label = ttk.Label(connection, text="Soft reset (staat blijft bewaard)")
+        self.reset_label = ttk.Label(connection, text="Soft reset (staat blijft bewaard)", style="Small.TLabel")
         self.reset_label.grid(row=2, column=1, columnspan=2, sticky="w", padx=(8, 0), pady=(6, 0))
 
         self.motion_enabled_var = tk.BooleanVar(value=False)
+        self.sonar_enabled_var = tk.BooleanVar(value=True)
+
+        toggles = ttk.Frame(connection)
+        toggles.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+        toggles.columnconfigure(0, weight=1)
+        toggles.columnconfigure(1, weight=1)
+
         self.motion_switch = ttk.Checkbutton(
-            connection,
-            text="Beweging toestaan",
+            toggles,
+            text="Beweging",
             variable=self.motion_enabled_var,
             command=self._on_motion_toggle,
+            style="Small.TCheckbutton",
         )
-        self.motion_switch.grid(row=3, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        self.motion_switch.grid(row=0, column=0, sticky="w")
 
-        self.sonar_enabled_var = tk.BooleanVar(value=True)
         self.sonar_switch = ttk.Checkbutton(
-            connection,
-            text="Sonar toestaan",
+            toggles,
+            text="Sonar",
             variable=self.sonar_enabled_var,
             command=self._on_sonar_toggle,
+            style="Small.TCheckbutton",
         )
-        self.sonar_switch.grid(row=4, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        self.sonar_switch.grid(row=0, column=1, sticky="w")
+
         self.emotion_buzzer_switch = ttk.Checkbutton(
-            connection,
+            toggles,
             text="Emotie-buzzer",
             variable=self.emotion_buzzer_enabled_var,
             command=self._on_emotion_buzzer_toggle,
+            style="Small.TCheckbutton",
         )
-        self.emotion_buzzer_switch.grid(row=5, column=0, columnspan=3, sticky="w", pady=(4, 0))
-        ttk.Label(connection, text="Rijsnelheid (wielen)").grid(row=6, column=0, sticky="w", pady=(8, 0))
-        ttk.Scale(connection, from_=30, to=255, orient="horizontal", variable=self.drive_speed_var).grid(
-            row=6, column=1, columnspan=2, sticky="ew", padx=(8, 0), pady=(8, 0)
-        )
+        self.emotion_buzzer_switch.grid(row=1, column=0, sticky="w", pady=(4, 0))
+
+        speed_row = ttk.Frame(connection)
+        speed_row.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+        speed_row.columnconfigure(1, weight=1)
+        ttk.Label(speed_row, text="Rijsnelheid", style="Small.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Scale(
+            speed_row,
+            from_=30,
+            to=255,
+            orient="horizontal",
+            variable=self.drive_speed_var,
+            length=180,
+        ).grid(row=0, column=1, sticky="ew", padx=(8, 0))
 
         llm_frame = ttk.Labelframe(status_frame, text="LLM status", style="Section.TLabelframe")
         llm_frame.grid(row=1, column=0, sticky="ew", pady=(0, 8))

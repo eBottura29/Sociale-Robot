@@ -14,5 +14,8 @@ logs/
 
 # Builds and releases
 nier.exe
+control_app.exe
+dist/control_app.exe
+build/control_app/
 release/
 build/nier/nier.pkg
