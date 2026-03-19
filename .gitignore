@@ -1,21 +1,40 @@
-# Python
+# OS / editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Python caches and tooling
 __pycache__/
 *.py[cod]
 *.pyd
+*.pyo
 .pytest_cache/
-*.log
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
 
 # Environment / secrets
 .env
+.env.*
 .hf_token
 
-# Logs directory
+# Runtime logs
 logs/
+*.log
 
-# Builds and releases
+# Build artifacts
+build/
+dist/
+*.spec.tmp
+
+# Local release outputs
+release/
+
+# Packaged executables copied to project root
 nier.exe
 control_app.exe
-dist/control_app.exe
-build/control_app/
-release/
-build/nier/nier.pkg

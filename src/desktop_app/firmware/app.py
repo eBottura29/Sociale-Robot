@@ -1,6 +1,8 @@
 import threading
 import time
 import random
+import re
+import unicodedata
 from datetime import datetime
 from collections import deque
 from pathlib import Path
@@ -193,6 +195,7 @@ class NierDesktopApp:
         self._debug_row(self.debug_frame, 7, "Laatste RX")
         self._debug_row(self.debug_frame, 8, "Wenkbrauw Links")
         self._debug_row(self.debug_frame, 9, "Wenkbrauw Rechts")
+        self._debug_row(self.debug_frame, 10, "LLM model (laatste)")
 
         self.debug_frame.grid_remove()
 
@@ -360,10 +363,13 @@ class NierDesktopApp:
         try:
             self._queue_llm_status("Busy", "Intent controleren")
             response = self._handle_basic_intent(message)
+            llm_used = False
             if response is None:
                 self._queue_llm_status("Busy", "LLM antwoord genereren")
                 history = list(self.conversation_history)
                 response = self.llm.generate_response(message, history=history, emotions=self.emotion_values)
+                llm_used = True
+            response = self._normalize_robot_text(response)
             temp_history = list(self.recent_messages)
             temp_history.append(f"Gebruiker: {message}")
             temp_history.append(f"Robot: {response}")
@@ -372,17 +378,24 @@ class NierDesktopApp:
             sentimentscore = self.llm.sentiment_score(context_text)
             emotions = self.emotions.compute(context_text, sentimentscore)
             self._queue_llm_status("Busy", "Antwoord tonen")
-            self.root.after(0, lambda: self._apply_response(message, response, emotions))
+            self.root.after(0, lambda: self._apply_response(message, response, emotions, llm_used))
         except Exception as exc:
             self.logger.log("ERROR", f"Message verwerking faalde: {exc}")
             self.root.after(0, self._handle_processing_error)
 
 
-    def _apply_response(self, message: str, response: str, emotions: dict) -> None:
+    def _apply_response(self, message: str, response: str, emotions: dict, llm_used: bool = True) -> None:
         self._stop_loading_animation()
         self.response_label.configure(text=response)
         self._set_debug("Antwoord (PC)", response)
         self.logger.log("ROBOT_MSG", response)
+        model_name = getattr(self.llm, "loaded_model_name", "").strip() if llm_used else ""
+        if llm_used and model_name:
+            self._set_debug("LLM model (laatste)", model_name)
+            self.logger.log("LLM_MODEL", model_name)
+        else:
+            self._set_debug("LLM model (laatste)", "n.v.t.")
+            self.logger.log("LLM_MODEL", "n.v.t.")
         self._update_lcd(response)
         self._start_lcd_scroll(response)
         self._set_debug("LCD regel 1", self.lcd_line1.cget("text"))
@@ -507,11 +520,34 @@ class NierDesktopApp:
 
 
     def _truncate_for_serial(self, text: str, limit: int = 128) -> str:
-        trimmed = text.replace("\n", " ").replace("\r", " ").strip()
+        trimmed = self._normalize_robot_text(text)
         if len(trimmed) <= limit:
             return trimmed
         
         return trimmed[:limit].rstrip()
+
+    def _normalize_robot_text(self, text: str) -> str:
+        if not text:
+            return ""
+        text = text.replace("\n", " ").replace("\r", " ").strip()
+        text = unicodedata.normalize("NFKD", text)
+        text = "".join(ch for ch in text if not unicodedata.combining(ch))
+        text = text.encode("ascii", "ignore").decode("ascii")
+        text = re.sub(r"\s+", " ", text).strip()
+        return self._capitalize_sentence_starts(text)
+
+    def _capitalize_sentence_starts(self, text: str) -> str:
+        if not text:
+            return text
+        chars = list(text)
+        make_upper = True
+        for idx, ch in enumerate(chars):
+            if make_upper and ch.isalpha():
+                chars[idx] = ch.upper()
+                make_upper = False
+            if ch in ".!?":
+                make_upper = True
+        return "".join(chars)
 
 
     def _serialize_emotions(self, emotions: dict) -> str:
@@ -844,6 +880,8 @@ class NierDesktopApp:
             return
         self.root.after(0, lambda: self._set_debug("Laatste RX", msg))
         self._queue_llm_status("Busy", msg)
+        if "fallback" in msg.lower() or "probeer kleiner model" in msg.lower():
+            self.logger.log("LLM_FALLBACK", msg)
         self.logger.log("LLM", msg)
 
     def _set_llm_status(self, state: str, action: str) -> None:
@@ -920,6 +958,7 @@ class NierDesktopApp:
         self._set_debug("Laatste RX", "-")
         self._set_debug("Wenkbrauw Links", "-")
         self._set_debug("Wenkbrauw Rechts", "-")
+        self._set_debug("LLM model (laatste)", "-")
 
         if self.lcd_scroll_after_id:
             self.root.after_cancel(self.lcd_scroll_after_id)

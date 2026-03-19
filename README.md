@@ -3,7 +3,7 @@
 [![Dwenguino](https://img.shields.io/badge/Platform-Dwenguino-orange)](https://www.dwengo.org/)
 [![Arduino](https://img.shields.io/badge/Arduino-Compatible-blue)](https://www.arduino.cc/)
 [![Python](https://img.shields.io/badge/Python-3.8+-green)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-1.1.1-brightgreen)]()
+[![Version](https://img.shields.io/badge/Version-1.2-brightgreen)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **NIER** (Neural Interactive Emotional Robot) is een intelligente sociale robot gebouwd met Dwenguino die eenzaamheid helpt bestrijden door middel van AI-gestuurde conversaties, emotionele intelligentie en autonome navigatie.
@@ -95,19 +95,19 @@ Dit robotconcept kan ook ingezet worden voor:
   - Kan ook stats weergeven (nog te bepalen)
 
 ### Navigatie & Sensoren
-- **2x Sonar Sensors** gemonteerd op 180Â° servo
+- **2x Sonar Sensors** gemonteerd op 180° servo
   - Meten afstand links/midden/rechts via sweep (20-90-160 graden)
   - Firmware houdt continue sonar-scan bij en stuurt telemetrie naar laptop
   
 - **Tank Rups Systeem** (4 wielen met loopbanden)
-  - Bestuurd door 2x 360Â° continue servos (een per kant)
+  - Bestuurd door 2x 360° continue servos (een per kant)
   - Ondersteunt tank-drive functies: vooruit, achteruit, links draaien, rechts draaien
   - Navigatie logica (AVOID/APPROACH/SEARCH) draait op robot, `MOVE:<left>,<right>` kan dit overriden
 
 ### Extra Features
 - **RGB LED** - Debugging of visuele effecten
 - **Buzzer** - R2D2-achtige piepjes voor acties en feedback
-- **Bidirectionele communicatie** - Robot â†” Laptop via seriele verbinding
+- **Bidirectionele communicatie** - Robot ↔ Laptop via seriele verbinding
 
 ---
 
@@ -123,7 +123,7 @@ Dit robotconcept kan ook ingezet worden voor:
     - Update LED matrices (emoties)
     - Toont antwoord op LCD
     - Sonar servo scant omgeving en robot bepaalt lokale navigatie
-    - Sonar data â†’ terug naar laptop (telemetrie/debug)
+    - Sonar data → terug naar laptop (telemetrie/debug)
 4. **Laptop**: Kan nog steeds `MOVE:<left>,<right>` commando's sturen voor directe controle
 
 ---
@@ -140,10 +140,10 @@ Dit robotconcept kan ook ingezet worden voor:
 
 ### Sensoren
 - **2x Ultrasone Sonar Sensors (HC-SR04)** - Afstandsmeting
-- **3x 180Â° Servo Motor** - Een voor sonar pan/tilt mechanisme en twee resterende voor wenkbrauwen
+- **3x 180° Servo Motor** - Een voor sonar pan/tilt mechanisme en twee resterende voor wenkbrauwen
 
 ### Aandrijving
-- **2x 360Â° Continue Servo Motors** - Tank aandrijving (links/rechts)
+- **2x 360° Continue Servo Motors** - Tank aandrijving (links/rechts)
 - **4x Wielen** - Tank rups/loopband systeem
 
 ### Audio
@@ -310,7 +310,7 @@ copy dist\nier.exe .\
 
 Deze snelle start gebruikt de release-zip, zonder Python installatie.
 
-1. Download de release-zip `nier_v1.1.1.zip`.
+1. Download de release-zip `nier_v1.2.zip`.
 2. Pak de zip uit naar een map naar keuze.
 3. Start `nier.exe`.
 4. (Optioneel) Start `control_app.exe` voor hardware testen.

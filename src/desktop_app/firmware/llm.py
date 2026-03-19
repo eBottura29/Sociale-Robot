@@ -1,11 +1,13 @@
 import os
 import random
+import sys
 import threading
 import traceback
 import types
 from pathlib import Path
 
 from config import (
+    LLM_FALLBACK_MODEL_NAMES,
     LLM_MODEL_NAME,
     SENTIMENT_MODEL_NAME,
     LLM_ALLOW_DOWNLOAD,
@@ -24,6 +26,7 @@ class LlmEngine:
         self.models_ready = False
         self.model_error = ""
         self.last_fallback = ""
+        self.loaded_model_name = ""
         self.model_lock = threading.Lock()
         self.debug_cb = debug_cb
 
@@ -77,6 +80,8 @@ class LlmEngine:
         except Exception as exc:
             self._debug(f"LLM_ERROR: {exc}")
             self._debug(f"TRACE:{traceback.format_exc()}")
+            if self._recover_with_smaller_model():
+                return self.generate_response(message, history=history, emotions=emotions)
             return self._error_response()
 
     def sentiment_score(self, text: str) -> int:
@@ -113,20 +118,17 @@ class LlmEngine:
             kwargs = {"local_files_only": local_only}
             if token:
                 kwargs["token"] = token
-            tokenizer = AutoTokenizer.from_pretrained(LLM_MODEL_NAME, **kwargs)
-            model = AutoModelForCausalLM.from_pretrained(LLM_MODEL_NAME, **kwargs)
-            self.generator = pipeline(
-                "text-generation", model=model, tokenizer=tokenizer, device=-1
+            loaded_model_name = self._load_generator_with_fallback(
+                AutoTokenizer, AutoModelForCausalLM, pipeline, kwargs
             )
-            sent_kwargs = {
-                "model": SENTIMENT_MODEL_NAME,
-                "device": -1,
-                "local_files_only": local_only,
-            }
-            if token:
-                sent_kwargs["token"] = token
-            self.sentiment = pipeline("sentiment-analysis", **sent_kwargs)
-            self.models_ready = True
+            self.loaded_model_name = loaded_model_name
+            if loaded_model_name != LLM_MODEL_NAME:
+                self.last_fallback = loaded_model_name
+                self._debug(f"LLM fallback actief: {loaded_model_name}")
+            self._load_sentiment_pipeline(pipeline, token, local_only)
+            self.models_ready = self.generator is not None
+            if not self.models_ready:
+                self.model_error = "Geen bruikbaar LLM-model gevonden."
         except Exception as exc:
             if not LLM_ALLOW_DOWNLOAD:
                 self.model_error = "LLM niet beschikbaar (offline of model niet lokaal)."
@@ -135,24 +137,141 @@ class LlmEngine:
             self._debug(self.model_error)
             self._debug(f"TRACE:{traceback.format_exc()}")
 
+    def _load_generator_with_fallback(
+        self, auto_tokenizer, auto_model, pipeline, kwargs: dict
+    ) -> str:
+        tried = []
+        for model_name in self._candidate_model_names():
+            try:
+                tokenizer = auto_tokenizer.from_pretrained(model_name, **kwargs)
+                model = auto_model.from_pretrained(model_name, **kwargs)
+                self.generator = pipeline(
+                    "text-generation", model=model, tokenizer=tokenizer, device=-1
+                )
+                return model_name
+            except Exception as exc:
+                tried.append((model_name, exc))
+                self._debug(f"LLM laadpoging mislukt ({model_name}): {exc}")
+                self._debug(f"TRACE:{traceback.format_exc()}")
+        if not LLM_ALLOW_DOWNLOAD:
+            self.model_error = "LLM niet beschikbaar (offline of model niet lokaal)."
+        else:
+            details = " | ".join([f"{name}: {err}" for name, err in tried])
+            self.model_error = f"Model laden faalde voor alle kandidaten: {details}"
+        return ""
+
+    def _load_sentiment_pipeline(self, pipeline, token: str, local_only: bool) -> None:
+        sent_kwargs = {
+            "model": SENTIMENT_MODEL_NAME,
+            "device": -1,
+            "local_files_only": local_only,
+        }
+        if token:
+            sent_kwargs["token"] = token
+        try:
+            self.sentiment = pipeline("sentiment-analysis", **sent_kwargs)
+        except Exception as exc:
+            # Sentiment is optional; keep chat available when this load fails.
+            self.sentiment = None
+            self._debug(f"Sentiment model laden faalde: {exc}")
+            self._debug(f"TRACE:{traceback.format_exc()}")
+
+    def _candidate_model_names(self) -> list[str]:
+        candidates = [LLM_MODEL_NAME]
+        for name in LLM_FALLBACK_MODEL_NAMES:
+            if name and name not in candidates:
+                candidates.append(name)
+        return candidates
+
+    def _recover_with_smaller_model(self) -> bool:
+        candidates = self._candidate_model_names()
+        if not candidates or self.loaded_model_name not in candidates:
+            return False
+        current_idx = candidates.index(self.loaded_model_name)
+        if current_idx >= len(candidates) - 1:
+            return False
+        for next_model in candidates[current_idx + 1 :]:
+            self._debug(
+                f"Generatie faalde op {self.loaded_model_name}; probeer kleiner model: {next_model}"
+            )
+            self.generator = None
+            self.models_ready = False
+            self.model_error = ""
+            if next_model not in LLM_FALLBACK_MODEL_NAMES:
+                continue
+            if self._force_load_specific_model(next_model):
+                self.loaded_model_name = next_model
+                return True
+        return False
+
+    def _force_load_specific_model(self, model_name: str) -> bool:
+        try:
+            os.environ.setdefault("TORCH_DISABLE_DYNAMO", "1")
+            os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
+            os.environ.setdefault("TORCH_COMPILE_DISABLE", "1")
+            self._install_torch_dynamo_stub()
+            from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+
+            local_only = not LLM_ALLOW_DOWNLOAD
+            token = self._load_hf_token()
+            kwargs = {"local_files_only": local_only}
+            if token:
+                kwargs["token"] = token
+            tokenizer = AutoTokenizer.from_pretrained(model_name, **kwargs)
+            model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
+            self.generator = pipeline(
+                "text-generation", model=model, tokenizer=tokenizer, device=-1
+            )
+            self._load_sentiment_pipeline(pipeline, token, local_only)
+            self.models_ready = True
+            self.last_fallback = model_name
+            return True
+        except Exception as exc:
+            self.model_error = f"Fallback laden faalde: {exc}"
+            self._debug(self.model_error)
+            self._debug(f"TRACE:{traceback.format_exc()}")
+            return False
+
     def _load_hf_token(self) -> str:
         env_token = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN")
         if env_token:
             return env_token.strip()
         try:
-            token_path = self._token_dir() / ".hf_token"
-            if token_path.exists():
+            token_path = self._find_existing_token_path()
+            if token_path is not None:
                 token = token_path.read_text(encoding="utf-8").strip()
-                return token
-            token = self._prompt_for_token(token_path)
+                if token:
+                    return token
+            token = self._prompt_for_token()
             if token:
                 return token
         except Exception:
             return ""
         return ""
 
-    def _token_dir(self) -> Path:
-        return Path.cwd()
+    def _find_existing_token_path(self) -> Path | None:
+        for candidate in self._token_paths():
+            if candidate.exists():
+                return candidate
+        return None
+
+    def _token_paths(self) -> list[Path]:
+        paths = []
+        cwd = Path.cwd()
+        paths.append(cwd / ".hf_token")
+        if getattr(sys, "frozen", False):
+            exe_dir = Path(sys.executable).resolve().parent
+            paths.append(exe_dir / ".hf_token")
+        paths.append(Path.home() / ".hf_token")
+        unique_paths = []
+        seen = set()
+        for path in paths:
+            key = str(path)
+            if key in seen:
+                continue
+            seen.add(key)
+            unique_paths.append(path)
+        return unique_paths
 
     def _install_torch_dynamo_stub(self) -> None:
         """Prevent torch._dynamo imports in frozen builds (avoids torch._numpy crash)."""
@@ -208,7 +327,7 @@ class LlmEngine:
         sys.modules.setdefault("torch._dynamo._trace_wrapped_higher_order_op", trace_mod)
         dynamo_mod._trace_wrapped_higher_order_op = trace_mod
 
-    def _prompt_for_token(self, token_path: Path) -> str:
+    def _prompt_for_token(self) -> str:
         try:
             import tkinter as tk
             from tkinter import simpledialog
@@ -224,18 +343,30 @@ class LlmEngine:
             token = simpledialog.askstring(
                 "Hugging Face token",
                 "Plak je Hugging Face token.\n"
-                "Het wordt opgeslagen als .hf_token in de huidige map.",
+                "Het wordt opgeslagen als .hf_token.",
                 parent=root,
             )
             if token:
                 token = token.strip()
                 if token:
-                    token_path.write_text(token, encoding="utf-8")
+                    if not self._save_token(token):
+                        self._debug("Token invoer ontvangen, maar opslaan van .hf_token faalde.")
                     return token
         finally:
             if temp_root is not None:
                 temp_root.destroy()
         return ""
+
+    def _save_token(self, token: str) -> bool:
+        for path in self._token_paths():
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(token, encoding="utf-8")
+                self._debug(f"HF token opgeslagen in: {path}")
+                return True
+            except Exception as exc:
+                self._debug(f"Token opslaan mislukt in {path}: {exc}")
+        return False
 
     def _error_response(self) -> str:
         code = 1

@@ -59,6 +59,10 @@ def default_settings() -> dict:
             },
             "llm": {
                 "model_name": "meta-llama/Llama-3.2-3B-Instruct",
+                "fallback_model_names": [
+                    "Qwen/Qwen2.5-0.5B-Instruct",
+                    "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                ],
                 "sentiment_model_name": "nlptown/bert-base-multilingual-uncased-sentiment",
                 "allow_download": True,
                 "max_new_tokens": 22,
