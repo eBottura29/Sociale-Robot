@@ -33,7 +33,6 @@ dist/
 *.spec.tmp
 
 # Local release outputs
-release/
 
 # Packaged executables copied to project root
 nier.exe
