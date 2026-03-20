@@ -80,7 +80,7 @@ Dit robotconcept kan ook ingezet worden voor:
 - Real-time communicatie via seriele verbinding (PySerial)
 
 ### Emotionele Expressie
-- **3x LED Matrixes** voor visuele emoties:
+- **3x LED Matrices** voor visuele emoties:
   - **Happiness** (Geluk/Blijdschap)
   - **Fatigue** (Moeheid/Energie Level)
   - **Hunger** (Honger)
