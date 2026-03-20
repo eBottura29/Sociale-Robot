@@ -62,9 +62,9 @@ Onze sociale robot biedt:
 ### Andere Potentiele Toepassingen
 
 Dit robotconcept kan ook ingezet worden voor:
-- **Dementiezorg** - gezelschap eN geheugenondersteunInG voor ouderen
-- **Therapieondersteuning** - hulpmiddel voor psycholoGen en thErapeuten  
-- **Educatie** - inteRactieve leerassistent voor kinderen met sociale angst
+- **Dementiezorg** - gezelschap en geheugenondersteuning voor ouderen
+- **Therapieondersteuning** - hulpmiddel voor psychologen en therapeuten  
+- **Educatie** - interactieve leerassistent voor kinderen met sociale angst
 - **Autisme-ondersteuning** - voorspelbare, veilige sociale interactie
 - **Thuiszorg** - monitoring en gezelschap voor alleenstaanden
 - **Entertainment** - interactieve gaming companion
@@ -80,7 +80,7 @@ Dit robotconcept kan ook ingezet worden voor:
 - Real-time communicatie via seriele verbinding (PySerial)
 
 ### Emotionele Expressie
-- **3x LED Matrixes** voor visuele emoties:
+- **3x LED Matrices** voor visuele emoties:
   - **Happiness** (Geluk/Blijdschap)
   - **Fatigue** (Moeheid/Energie Level)
   - **Hunger** (Honger)
