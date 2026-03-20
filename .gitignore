@@ -38,3 +38,6 @@ release/
 # Packaged executables copied to project root
 nier.exe
 control_app.exe
+
+# Script
+script.txt
