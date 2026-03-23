@@ -1,1 +1,152 @@
-https://docs.google.com/document/d/19xayEw2qeWLSHQu3gfQ8EumlpozMrXJf97kRadfrG-A/edit?usp=sharing
+N.I.E.R. de Robot (Neural Interactive Emotional Robot)
+Hardware:
+Component
+Function
+Stroom
+Spanning
+Frequentie
+3-4x(1 ontvanger 3 zicht) Ultrasonic sensor (HCSR04)
+“Zicht”
+15mA
+5V
+40kHz max
+1x LCD scherm (winstar WH1602B)
+Output van spraak van robot
+/
+3,7V
+/
+2x 360° servos
+1 voor elk rupsband (1 per zijde)
+2,7mA idle
+70mA no load
+400mA stall
+5V
+/
+3x 180° servos
+1 hoofd en 2 wenkbrauw
+2,7mA idle
+70mA no load
+400mA stall
+5V
+/
+1x Batterij
+POWER
+/
+6V (max volt needed)
+/
+3x 8x8 ledmatrix (1088AS)
+Emoties tonen
+20mA
+2,1V - 2,5V
+/
+1x geluidssensor (KY-038)
+Binair signalen detecteren
+
+
+
+
+
+
+
+
+DWENGO BOARD SPECS:
+Board naam
+Min-Max Spanning
+Program memory
+Memory
+Data memory
+PIC18F4550
+2V - 5,5V
+32kB
+32MB
+2kB
+
+
+
+Software:
+Dual-device (Laptop & Sociale Robot)
+
+Laptop (via dwengo website)
+De laptop zal via de serial monitor communiceren met de robot
+In de laptop:
+
+
+
+Sociale Robot (N.I.E.R.)
+
+Data verwerking
+De binaire data wordt omgezet naar:
+Doelpositie (relatieve afstand van robot in x- en y-componenten)
+De robot bepaalt:
+Startpositie = home
+Eindpositie = ontvangen doel
+
+Navigatie
+Hybride navigatie (doelgericht + reactief)
+
+Sensor setup
+De robot heeft 3 sonar sensoren aan de bovenkant
+Gezamenlijke horizontale kijkhoek: ongeveer 120°
+Links
+Midden
+Rechts
+Detectiebereik: onbekend (misschien enkele centimeters?)
+Sensoren leveren:
+Afstand tot dichtstbijzijnde obstakel per richting
+
+Navigatie overzicht
+De navigatie bestaat uit twee lagen:
+Hoog-niveau navigatie (doelgericht)
+Laag-niveau navigatie (reactieve obstacle avoidance)
+Deze lagen werken gelijktijdig
+
+1. Hoog-niveau navigatie (doelgericht)
+De robot kent:
+Startpositie (home)
+Doelpositie (zone of relatieve richting)
+De robot berekent:
+Een globale richting naar het doel
+Er wordt geen gedetailleerde kaart gebruikt
+Output:
+Gewenste rijrichting (heading)
+
+2. Laag-niveau navigatie (sonar-gebaseerd)
+De robot leest continu de “sonar” waarden:
+L = links
+M = midden
+R = rechts
+Obstacle avoidance heeft prioriteit op doelrichting
+Beslissingslogica:
+Vrij pad
+Als M > d_min
+Robot rijdt vooruit
+Obstacle vooraan
+Als M ≤ d_min
+Robot draait naar de kant met de meeste vrije ruimte (max(L, R))
+Smalle doorgang / vastzitten
+Als L ≤ d_min én R ≤ d_min
+Robot stopt en voert een draai- of heroriëntatie actie uit
+
+Combinatie van beide lagen
+De reactieve laag:
+Voorkomt botsingen
+Stuurt korte-termijn bewegingen
+De doelgerichte laag:
+Corrigeert de rijrichting zodat de robot naar het doel blijft bewegen
+Na elke obstacle-actie:
+Robot past zijn heading opnieuw aan richting doel
+
+Aankomst & terugkeer
+Wanneer de robot detecteert dat de doelzone bereikt is:
+Robot stopt
+Cargo deur opent automatisch
+Na een wachttijd of bevestiging:
+Robot keert via dezelfde hybride navigatie terug naar de startpositie (home)
+Robot gaat daarna in rustmodus
+
+GitHub pagina van project: Sociale Robot
+
+ 
+ERROR CODES:
+0 - /
+1 - transmission fail (xor-checksum fail)
