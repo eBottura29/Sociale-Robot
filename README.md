@@ -374,6 +374,7 @@ De app slaat die automatisch op als `.hf_token` in de huidige map.
 ```text
 docs/
   competition/                -> Wedstrijd documenten (PDF)
+  extra document              -> Zoals video script en Ondezoek naar wat nier is en heo de onderdelen werken
 src/
   desktop_app/
     firmware/                 -> Hoofd desktop app code (run: main.py)
