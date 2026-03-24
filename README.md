@@ -3,10 +3,12 @@
 [![Dwenguino](https://img.shields.io/badge/Platform-Dwenguino-orange)](https://www.dwengo.org/)
 [![Arduino](https://img.shields.io/badge/Arduino-Compatible-blue)](https://www.arduino.cc/)
 [![Python](https://img.shields.io/badge/Python-3.8+-green)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-1.2-brightgreen)]()
+[![Version](https://img.shields.io/badge/Version-2.0-brightgreen)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **NIER** (Neural Interactive Emotional Robot) is een intelligente sociale robot gebouwd met Dwenguino die eenzaamheid helpt bestrijden door middel van AI-gestuurde conversaties, emotionele intelligentie en autonome navigatie.
+
+Dit is een REPO voor onze Sociale Robot genaamd NIER. Je kan de REPO [hier](https://github.com/eBottura29/Sociale-Robot) vinden
 
 > *Een project voor de Sociale Robot Wedstrijd gehost door Dwengo VZW*
 

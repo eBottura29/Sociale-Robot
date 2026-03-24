@@ -1,5 +1,6 @@
 import os
 import random
+import re
 import sys
 import threading
 import traceback
@@ -29,13 +30,14 @@ class LlmEngine:
         self.loaded_model_name = ""
         self.model_lock = threading.Lock()
         self.debug_cb = debug_cb
+        self.disable_model_loading = False
 
     def generate_response(
         self, message: str, history: list | None = None, emotions: dict | None = None
     ) -> str:
         self._ensure_models()
         if not self.models_ready or self.generator is None:
-            return self._error_response()
+            return self._local_fallback_response(message, emotions)
         history = history or []
         emotions = emotions or {}
         emotion_lines = (
@@ -82,7 +84,7 @@ class LlmEngine:
             self._debug(f"TRACE:{traceback.format_exc()}")
             if self._recover_with_smaller_model():
                 return self.generate_response(message, history=history, emotions=emotions)
-            return self._error_response()
+            return self._local_fallback_response(message, emotions)
 
     def sentiment_score(self, text: str) -> int:
         self._ensure_models()
@@ -98,13 +100,20 @@ class LlmEngine:
             return 3
 
     def _ensure_models(self) -> None:
-        if self.models_ready or self.model_error:
+        if self._should_disable_local_llm_by_default():
+            self.disable_model_loading = True
+            if not self.model_error:
+                self.model_error = "Lokale LLM is expliciet uitgeschakeld via NIER_DISABLE_LOCAL_LLM=1."
+                self._debug(self.model_error)
+            return
+        if self.disable_model_loading or self.models_ready or self.model_error:
             return
         try:
             # Disable torch dynamo/compile paths inside packaged app to avoid torch._numpy issues.
             os.environ.setdefault("TORCH_DISABLE_DYNAMO", "1")
             os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
             os.environ.setdefault("TORCH_COMPILE_DISABLE", "1")
+            os.environ.setdefault("HF_ENABLE_PARALLEL_LOADING", "0")
             self._install_torch_dynamo_stub()
             from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
         except Exception as exc:
@@ -153,9 +162,15 @@ class LlmEngine:
                 tried.append((model_name, exc))
                 self._debug(f"LLM laadpoging mislukt ({model_name}): {exc}")
                 self._debug(f"TRACE:{traceback.format_exc()}")
+                if self._is_resource_error(exc):
+                    self.disable_model_loading = True
+                    self.model_error = (
+                        "LLM uitgeschakeld: te weinig schijfruimte of virtueel geheugen."
+                    )
+                    break
         if not LLM_ALLOW_DOWNLOAD:
             self.model_error = "LLM niet beschikbaar (offline of model niet lokaal)."
-        else:
+        elif not self.model_error:
             details = " | ".join([f"{name}: {err}" for name, err in tried])
             self.model_error = f"Model laden faalde voor alle kandidaten: {details}"
         return ""
@@ -177,10 +192,20 @@ class LlmEngine:
             self._debug(f"TRACE:{traceback.format_exc()}")
 
     def _candidate_model_names(self) -> list[str]:
-        candidates = [LLM_MODEL_NAME]
+        primary_first_env = os.getenv("NIER_PREFER_PRIMARY_MODEL", "").strip().lower()
+        primary_first = primary_first_env in ("1", "true", "yes", "on")
+        candidates: list[str] = []
+        if primary_first or os.name != "nt":
+            candidates.append(LLM_MODEL_NAME)
+            for name in LLM_FALLBACK_MODEL_NAMES:
+                if name and name not in candidates:
+                    candidates.append(name)
+            return candidates
         for name in LLM_FALLBACK_MODEL_NAMES:
             if name and name not in candidates:
                 candidates.append(name)
+        if LLM_MODEL_NAME and LLM_MODEL_NAME not in candidates:
+            candidates.append(LLM_MODEL_NAME)
         return candidates
 
     def _recover_with_smaller_model(self) -> bool:
@@ -209,6 +234,7 @@ class LlmEngine:
             os.environ.setdefault("TORCH_DISABLE_DYNAMO", "1")
             os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
             os.environ.setdefault("TORCH_COMPILE_DISABLE", "1")
+            os.environ.setdefault("HF_ENABLE_PARALLEL_LOADING", "0")
             self._install_torch_dynamo_stub()
             from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
@@ -227,6 +253,11 @@ class LlmEngine:
             self.last_fallback = model_name
             return True
         except Exception as exc:
+            if self._is_resource_error(exc):
+                self.disable_model_loading = True
+                self.model_error = "LLM uitgeschakeld: te weinig schijfruimte of virtueel geheugen."
+                self._debug(self.model_error)
+                return False
             self.model_error = f"Fallback laden faalde: {exc}"
             self._debug(self.model_error)
             self._debug(f"TRACE:{traceback.format_exc()}")
@@ -372,7 +403,69 @@ class LlmEngine:
         code = 1
         detail = self.model_error or "LLM niet beschikbaar."
         self._debug(f"{code}: {detail}")
-        return f"ERROR CODE {code} - Check log voor details."
+        return self._local_fallback_response("")
+
+    def _local_fallback_response(self, message: str, emotions: dict | None = None) -> str:
+        msg = (message or "").strip()
+        lowered = msg.lower()
+        emotions = emotions or {}
+        dominant = max(emotions.items(), key=lambda kv: kv[1])[0] if emotions else ""
+
+        if any(w in lowered for w in ("hallo", "hey", "hoi", "goeiemorgen", "goedemorgen", "goedenavond")):
+            return "Hey, ik ben er. Vertel, waar heb je nu zin in?"
+        if any(w in lowered for w in ("hoe gaat", "gaat het", "alles goed")):
+            return "Met mij gaat het goed. Met jou ook?"
+        if any(w in lowered for w in ("honger", "eten", "snoep", "food")):
+            return "Ik heb altijd zin in een snack. Wat staat er op het menu?"
+        if any(w in lowered for w in ("moe", "slapen", "slaap")):
+            return "Een powernap klinkt goed. Maar ik kan nog even door."
+        if "?" in lowered or lowered.startswith(("waarom", "hoe", "wat", "wanneer", "wie", "welke")):
+            topic = self._extract_topic(msg)
+            if topic:
+                return f"Goede vraag over {topic}. Ik kan het simpel uitleggen als je wil."
+            return "Goede vraag. Wil je een kort antwoord of stap voor stap?"
+        if dominant == "Hunger":
+            return "Dat klinkt interessant. Mijn honger-meter gaat wel omhoog hiervan."
+        if dominant == "Happiness":
+            return "Nice, dat klinkt leuk. Vertel nog iets."
+        if dominant == "Sadness":
+            return "Dat klinkt lastig. Ik ben er, je mag verder vertellen."
+        if msg:
+            topic = self._extract_topic(msg)
+            if topic:
+                return f"Ik hoor je over {topic}. Vertel nog een beetje meer."
+            return "Ik luister. Wil je dat ik kort antwoord of wat uitgebreider?"
+        return "Ik ben er. Zeg maar wat je wil testen."
+
+    @staticmethod
+    def _extract_topic(text: str) -> str:
+        cleaned = re.sub(r"[^a-zA-Z0-9\s\-]", " ", text).strip()
+        words = [w for w in cleaned.split() if len(w) > 2]
+        if not words:
+            return ""
+        return " ".join(words[:3]).lower()
+
+    @staticmethod
+    def _is_resource_error(exc: Exception) -> bool:
+        text = str(exc).lower()
+        markers = (
+            "os error 1455",
+            "os error 112",
+            "paging file",
+            "virtueel geheugen",
+            "virtual memory",
+            "not enough space on the disk",
+            "not enough memory",
+            "insufficient memory",
+            "there is not enough space",
+            "there is not enough memory",
+        )
+        return any(marker in text for marker in markers)
+
+    @staticmethod
+    def _should_disable_local_llm_by_default() -> bool:
+        disable_env = os.getenv("NIER_DISABLE_LOCAL_LLM", "").strip().lower()
+        return disable_env in ("1", "true", "yes", "on")
 
     def _truncate_reply(self, text: str) -> str:
         if not text:

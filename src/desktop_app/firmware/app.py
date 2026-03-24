@@ -66,6 +66,21 @@ class NierDesktopApp:
         self.pan_auto_after_id = None
         self.pan_auto_target_angle = 20
         self.pan_auto_speed_ms = max(40, min(600, int(PAN_AUTO_SPEED_MS)))
+        self.pan_speed_var = tk.IntVar(value=max(10, min(300, int(self.pan_auto_speed_ms))))
+        self.pan_auto_min_angle = 20.0
+        self.pan_auto_max_angle = 160.0
+        self.pan_auto_angle = float(self.pan_auto_min_angle)
+        self.pan_auto_direction = 1.0
+        self.pan_auto_tick_ms = 20
+        self.pan_auto_last_tick_at = 0.0
+        self.sonar_pulse_threshold_cm = 5
+        self.sonar_tap_distance_threshold_cm = 10
+        self.sonar_pulse_hunger_drop = 5
+        self.sonar_pulse_window_s = 0.9
+        self.sonar_pulse_cooldown_s = 0.7
+        self.last_sonar_closest_cm: int | None = None
+        self.last_sonar_sample_at = 0.0
+        self.last_hunger_pulse_at = 0.0
 
         self.serial = SerialManager(debug_cb=self._on_serial_tx_debug)
         self.llm = LlmEngine(debug_cb=self._on_llm_debug)
@@ -275,6 +290,18 @@ class NierDesktopApp:
             variable=self.drive_speed_var,
             length=180,
         ).grid(row=0, column=1, sticky="ew", padx=(8, 0))
+
+        ttk.Label(speed_row, text="Top servo (deg/s)", style="Small.TLabel").grid(
+            row=1, column=0, sticky="w", pady=(6, 0)
+        )
+        ttk.Scale(
+            speed_row,
+            from_=10,
+            to=300,
+            orient="horizontal",
+            variable=self.pan_speed_var,
+            length=180,
+        ).grid(row=1, column=1, sticky="ew", padx=(8, 0), pady=(6, 0))
 
         llm_frame = ttk.Labelframe(status_frame, text="LLM status", style="Section.TLabelframe")
         llm_frame.grid(row=1, column=0, sticky="ew", pady=(0, 8))
@@ -590,9 +617,15 @@ class NierDesktopApp:
 
         self._reset_stats()
         self._send_line("HELLO")
-        self._send_line("SONAR:ON" if self.sonar_enabled else "SONAR:OFF")
-        self._set_telemetry("Sonar Status", "AAN" if self.sonar_enabled else "UIT")
-        self._start_pan_auto_loop()
+        # Keep sonar sensors active; the checkbox controls head sweep only.
+        self._send_line("SONAR:ON")
+        self._set_telemetry("Sonar Status", "SCAN AAN" if self.sonar_enabled else "HEAD STILL")
+        if self.sonar_enabled:
+            self._start_pan_auto_loop()
+        else:
+            self._stop_pan_auto_loop()
+            self._send_line("PAN:MANUAL")
+            self._send_line("PAN:90")
         if not self.navigation_enabled:
             self._send_line("STOP")
             self._set_telemetry("Navigatie Modus", "AUTO (OFF)")
@@ -704,8 +737,8 @@ class NierDesktopApp:
         self.navigation_enabled = bool(self.motion_enabled_var.get())
         if self.navigation_enabled:
             if not self.sonar_enabled:
-                self._set_telemetry("Navigatie Modus", "AUTO (ON) - SONAR UIT")
-                self.logger.log("NAV", "Navigatie ingeschakeld (sonar uit)")
+                self._set_telemetry("Navigatie Modus", "AUTO (ON) - HEAD STILL")
+                self.logger.log("NAV", "Navigatie ingeschakeld (head still)")
                 return
             self._set_telemetry("Navigatie Modus", "AUTO (ON)")
             self.logger.log("NAV", "Navigatie ingeschakeld")
@@ -717,14 +750,14 @@ class NierDesktopApp:
         self.logger.log("NAV", "Navigatie uitgeschakeld")
 
     def _on_sonar_toggle(self) -> None:
+        # Checkbox now controls only head sweep; sonar sensing remains ON.
         self.sonar_enabled = bool(self.sonar_enabled_var.get())
-        status = "AAN" if self.sonar_enabled else "UIT"
+        status = "SCAN AAN" if self.sonar_enabled else "HEAD STILL"
         self._set_telemetry("Sonar Status", status)
 
         if self.connected and self.serial.serial_port:
-            cmd = "SONAR:ON" if self.sonar_enabled else "SONAR:OFF"
-            self._send_line(cmd)
-            self.logger.log("TX", cmd)
+            self._send_line("SONAR:ON")
+            self.logger.log("TX", "SONAR:ON")
             if not self.sonar_enabled and self.navigation_enabled:
                 self._send_line("STOP")
                 self._set_telemetry("Laatste Commando", "STOP")
@@ -733,19 +766,17 @@ class NierDesktopApp:
             self._start_pan_auto_loop()
         else:
             self._stop_pan_auto_loop()
-
-        if not self.sonar_enabled:
-            self._set_telemetry("Sonar Links", "0 cm")
-            self._set_telemetry("Sonar Rechts", "0 cm")
-            self._set_telemetry("Dichtste Afstand", "0 cm")
+            if self.connected and self.serial.serial_port:
+                self._send_line("PAN:MANUAL")
+                self._send_line("PAN:90")
             if self.navigation_enabled:
-                self._set_telemetry("Navigatie Modus", "AUTO (ON) - SONAR UIT")
-            self.logger.log("SONAR", "Sonar uitgeschakeld")
+                self._set_telemetry("Navigatie Modus", "AUTO (ON) - HEAD STILL")
+            self.logger.log("SONAR", "Head sweep uitgeschakeld (sonar blijft aan)")
             return
 
         if self.navigation_enabled:
             self._set_telemetry("Navigatie Modus", "AUTO (ON)")
-        self.logger.log("SONAR", "Sonar ingeschakeld")
+        self.logger.log("SONAR", "Head sweep ingeschakeld")
 
     def _on_emotion_buzzer_toggle(self) -> None:
         if not self.emotion_buzzer_enabled_var.get() and self.connected and self.serial.serial_port:
@@ -766,7 +797,11 @@ class NierDesktopApp:
                 except UnicodeDecodeError:
                     continue
                 if line:
-                    self._handle_line(line)
+                    try:
+                        self._handle_line(line)
+                    except Exception as exc:
+                        self.logger.log("HANDLE_ERR", f"{exc} | line={line}")
+                        self.logger.log("HANDLE_TRACE", traceback.format_exc())
         except serial.SerialException as exc:
             self.connection_status.configure(text=f"Status: Verbroken - {exc}")
             self.logger.log("SERIAL_ERR", str(exc))
@@ -782,7 +817,7 @@ class NierDesktopApp:
 
         if line == "READY":
             if self.navigation_enabled and not self.sonar_enabled:
-                mode = "AUTO (ON) - SONAR UIT"
+                mode = "AUTO (ON) - HEAD STILL"
             else:
                 mode = "Online" if self.navigation_enabled else "AUTO (OFF)"
             self._set_telemetry("Navigatie Modus", mode)
@@ -800,17 +835,13 @@ class NierDesktopApp:
                 sonar_left = self._safe_int(parts[0])
                 sonar_right = self._safe_int(parts[1])
                 closest = self._safe_int(parts[2])
-                if self.sonar_enabled:
-                    self._set_telemetry("Sonar Links", f"{sonar_left} cm")
-                    self._set_telemetry("Sonar Rechts", f"{sonar_right} cm")
-                    self._set_telemetry("Dichtste Afstand", f"{closest} cm")
-                else:
-                    self._set_telemetry("Sonar Links", "0 cm")
-                    self._set_telemetry("Sonar Rechts", "0 cm")
-                    self._set_telemetry("Dichtste Afstand", "0 cm")
+                self._set_telemetry("Sonar Links", f"{sonar_left} cm")
+                self._set_telemetry("Sonar Rechts", f"{sonar_right} cm")
+                self._set_telemetry("Dichtste Afstand", f"{closest} cm")
+                self._update_hunger_from_sonar_pulse(sonar_left, sonar_right, closest)
                 self.battery_bar.configure(value=self._safe_int(parts[3]))
                 if self.navigation_enabled and not self.sonar_enabled:
-                    nav_mode = "AUTO (ON) - SONAR UIT"
+                    nav_mode = "AUTO (ON) - HEAD STILL"
                 else:
                     nav_mode = parts[4] if self.navigation_enabled else "AUTO (OFF)"
                 self._set_telemetry("Navigatie Modus", nav_mode)
@@ -913,6 +944,46 @@ class NierDesktopApp:
         except ValueError:
             return 0
 
+    @staticmethod
+    def _closest_valid_distance_cm(sonar_left: int, sonar_right: int, closest_hint: int | None = None) -> int | None:
+        valid = [cm for cm in (sonar_left, sonar_right) if cm > 0]
+        if closest_hint is not None and closest_hint > 0:
+            valid.append(closest_hint)
+        if not valid:
+            return None
+        return min(valid)
+
+    def _update_hunger_from_sonar_pulse(
+        self, sonar_left: int, sonar_right: int, closest_hint: int | None = None
+    ) -> None:
+        closest_cm = self._closest_valid_distance_cm(sonar_left, sonar_right, closest_hint)
+        now = time.time()
+        if closest_cm is None:
+            self.last_sonar_closest_cm = None
+            self.last_sonar_sample_at = now
+            return
+        if self.last_sonar_closest_cm is not None and self.last_sonar_sample_at > 0:
+            drop_cm = self.last_sonar_closest_cm - closest_cm
+            dt = now - self.last_sonar_sample_at
+            enough_drop = drop_cm >= self.sonar_pulse_threshold_cm
+            close_tap = closest_cm <= self.sonar_tap_distance_threshold_cm and drop_cm >= 2
+            is_short_pulse = dt <= self.sonar_pulse_window_s
+            cooldown_ok = (now - self.last_hunger_pulse_at) >= self.sonar_pulse_cooldown_s
+            if (enough_drop or close_tap) and is_short_pulse and cooldown_ok:
+                self._decrease_hunger_from_sonar_pulse(drop_cm, closest_cm)
+                self.last_hunger_pulse_at = now
+        self.last_sonar_closest_cm = closest_cm
+        self.last_sonar_sample_at = now
+
+    def _decrease_hunger_from_sonar_pulse(self, drop_cm: int, closest_cm: int) -> None:
+        current_hunger = max(0, min(100, int(self.emotions.stat_levels.get("Hunger", 0))))
+        new_hunger = max(0, current_hunger - self.sonar_pulse_hunger_drop)
+        if new_hunger == current_hunger:
+            return
+        self.emotions.stat_levels["Hunger"] = new_hunger
+        self._set_emotion("Hunger", new_hunger)
+        self.logger.log("HUNGER", f"Sonar pulse ({drop_cm}cm drop, closest {closest_cm}cm) -> {current_hunger}->{new_hunger}")
+
 
     def _refresh_ports(self) -> None:
         ports = self.serial.refresh_ports()
@@ -938,7 +1009,7 @@ class NierDesktopApp:
         self._set_telemetry("Navigatie Modus", "Offline")
         self._set_telemetry("Laatste Commando", "-")
         self._set_telemetry("RGB Status", "-")
-        self._set_telemetry("Sonar Status", "AAN" if self.sonar_enabled_var.get() else "UIT")
+        self._set_telemetry("Sonar Status", "SCAN AAN" if self.sonar_enabled_var.get() else "HEAD STILL")
         self._set_telemetry("Wenkbrauw Links", "90°")
         self._set_telemetry("Wenkbrauw Rechts", "90°")
         self.navigation_enabled = bool(self.motion_enabled_var.get())
@@ -971,6 +1042,9 @@ class NierDesktopApp:
         self.lcd_scroll_index = 0
         self.loading_animation_active = False
         self.loading_dot_count = 0
+        self.last_sonar_closest_cm = None
+        self.last_sonar_sample_at = 0.0
+        self.last_hunger_pulse_at = 0.0
 
 
     def _on_close(self) -> None:
@@ -984,21 +1058,42 @@ class NierDesktopApp:
             return
         self._stop_pan_auto_loop()
         self._send_line("PAN:MANUAL")
-        self.pan_auto_target_angle = 160
+        self.pan_auto_angle = float(self.pan_auto_min_angle)
+        self.pan_auto_direction = 1.0
+        self.pan_auto_last_tick_at = time.time()
+        self._send_line(f"PAN:{int(round(self.pan_auto_angle))}")
         self._tick_pan_auto_loop()
 
     def _stop_pan_auto_loop(self) -> None:
         if self.pan_auto_after_id is not None:
             self.root.after_cancel(self.pan_auto_after_id)
             self.pan_auto_after_id = None
+        self.pan_auto_last_tick_at = 0.0
 
     def _tick_pan_auto_loop(self) -> None:
         if not self.connected or not self.serial.serial_port or not self.sonar_enabled:
             self.pan_auto_after_id = None
             return
-        self._send_line(f"PAN:{self.pan_auto_target_angle}")
-        self.pan_auto_target_angle = 20 if self.pan_auto_target_angle >= 160 else 160
-        self.pan_auto_after_id = self.root.after(self.pan_auto_speed_ms, self._tick_pan_auto_loop)
+        now = time.time()
+        if self.pan_auto_last_tick_at <= 0:
+            dt = self.pan_auto_tick_ms / 1000.0
+        else:
+            dt = max(0.005, min(0.2, now - self.pan_auto_last_tick_at))
+        self.pan_auto_last_tick_at = now
+        speed_deg_per_s = max(10.0, min(300.0, float(self.pan_speed_var.get())))
+        next_angle = self.pan_auto_angle + (self.pan_auto_direction * speed_deg_per_s * dt)
+        if next_angle >= self.pan_auto_max_angle:
+            overshoot = next_angle - self.pan_auto_max_angle
+            next_angle = self.pan_auto_max_angle - overshoot
+            self.pan_auto_direction = -1.0
+        elif next_angle <= self.pan_auto_min_angle:
+            overshoot = self.pan_auto_min_angle - next_angle
+            next_angle = self.pan_auto_min_angle + overshoot
+            self.pan_auto_direction = 1.0
+        next_angle = max(self.pan_auto_min_angle, min(self.pan_auto_max_angle, next_angle))
+        self.pan_auto_angle = next_angle
+        self._send_line(f"PAN:{int(round(self.pan_auto_angle))}")
+        self.pan_auto_after_id = self.root.after(self.pan_auto_tick_ms, self._tick_pan_auto_loop)
 
 
 class AppLogger:

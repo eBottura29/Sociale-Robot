@@ -65,6 +65,21 @@ class ControlLabApp:
         self.drive_keepalive_interval_ms = 120
         self.pan_auto_after_id = None
         self.pan_auto_target_angle = 20
+        self.pan_auto_min_angle = 20.0
+        self.pan_auto_max_angle = 160.0
+        self.pan_auto_angle = float(self.pan_auto_min_angle)
+        self.pan_auto_direction = 1.0
+        self.pan_auto_tick_ms = 20
+        self.pan_auto_last_tick_at = 0.0
+        base_pan_step = max(1, min(30, int(CONTROL_LAB_DEFAULTS.get("pan_key_step_deg", 5))))
+        self.pan_key_step_deg = max(1, min(30, base_pan_step * 2))
+        base_pan_scale = max(0.05, min(1.0, float(CONTROL_LAB_DEFAULTS.get("pan_manual_scale", 0.35))))
+        self.pan_manual_scale = max(0.05, min(1.0, base_pan_scale * 2.0))
+        self.pan_hold_repeat_ms = max(25, min(200, int(CONTROL_LAB_DEFAULTS.get("pan_hold_repeat_ms", 50))))
+        self.pan_smooth_interval_ms = max(15, min(80, int(CONTROL_LAB_DEFAULTS.get("pan_smooth_interval_ms", 20))))
+        self.pan_angle_float = float(self.pan_angle_var.get())
+        self.pan_motion_after_id = None
+        self.pan_motion_last_ts = 0.0
 
         self.keybinds = self._load_keybinds()
         self.matrix_patterns = load_led_matrix_patterns(EMOTIONS)
@@ -232,7 +247,7 @@ class ControlLabApp:
         ttk.Label(frame, text="Manual angle").grid(row=1, column=0, sticky="w", pady=(6, 0))
         self.pan_scale = ttk.Scale(frame, from_=0, to=180, orient="horizontal", variable=self.pan_angle_var)
         self.pan_scale.grid(row=1, column=1, sticky="ew", padx=(8, 0), pady=(6, 0))
-        ttk.Label(frame, text="Auto speed (ms per sweep step, lower=faster)").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        ttk.Label(frame, text="Sweep speed (deg/s)").grid(row=2, column=0, sticky="w", pady=(6, 0))
         self.pan_auto_speed_scale = ttk.Scale(frame, from_=40, to=600, orient="horizontal", variable=self.pan_auto_speed_var)
         self.pan_auto_speed_scale.grid(row=2, column=1, sticky="ew", padx=(8, 0), pady=(6, 0))
         ttk.Label(frame, text="Manual mode sends full speed: 0=left, 90=stop, 180=right").grid(
@@ -350,6 +365,12 @@ class ControlLabApp:
         widget_class = event.widget.winfo_class()
         if widget_class in ("Entry", "TEntry") and key != self.keybinds["send_lcd"]:
             return
+        if key in ("left", "right", "up", "down"):
+            if key in self.active_keys:
+                return
+            self.active_keys.add(key)
+            self._start_pan_motion_loop()
+            return
         if key in self.active_keys:
             return
         self.active_keys.add(key)
@@ -389,7 +410,68 @@ class ControlLabApp:
         key = event.keysym.lower()
         if key in self.active_keys:
             self.active_keys.remove(key)
+        if key in ("left", "right", "up", "down"):
+            if self._pan_direction_from_active_keys() == 0:
+                self._stop_pan_motion_loop()
         self._update_drive_from_keys()
+
+    def _pan_direction_from_active_keys(self) -> int:
+        right = ("right" in self.active_keys) or ("up" in self.active_keys)
+        left = ("left" in self.active_keys) or ("down" in self.active_keys)
+        if right and not left:
+            return 1
+        if left and not right:
+            return -1
+        return 0
+
+    def _ensure_pan_manual_mode(self) -> bool:
+        if not self.sonar_enabled.get():
+            return False
+        if self.pan_auto.get():
+            self.pan_auto.set(False)
+            self._on_pan_mode_toggle()
+        return True
+
+    def _start_pan_motion_loop(self) -> None:
+        if not self._ensure_pan_manual_mode():
+            return
+        self._set_t("Pan Mode", "MANUAL")
+        self.pan_angle_float = float(self.pan_angle_var.get())
+        self.pan_motion_last_ts = time.time()
+        self._tick_pan_motion_loop()
+
+    def _stop_pan_motion_loop(self) -> None:
+        if self.pan_motion_after_id is not None:
+            self.root.after_cancel(self.pan_motion_after_id)
+            self.pan_motion_after_id = None
+        self.pan_motion_last_ts = 0.0
+
+    def _tick_pan_motion_loop(self) -> None:
+        if not self._ensure_pan_manual_mode():
+            self._stop_pan_motion_loop()
+            return
+        direction = self._pan_direction_from_active_keys()
+        if direction == 0:
+            self._stop_pan_motion_loop()
+            return
+        now = time.time()
+        if self.pan_motion_last_ts <= 0.0:
+            dt = self.pan_smooth_interval_ms / 1000.0
+        else:
+            dt = max(0.005, min(0.2, now - self.pan_motion_last_ts))
+        self.pan_motion_last_ts = now
+        base_speed = (self.pan_key_step_deg * 1000.0) / max(1.0, float(self.pan_hold_repeat_ms))
+        speed_deg_per_s = max(20.0, min(720.0, base_speed))
+        next_angle = self.pan_angle_float + (direction * speed_deg_per_s * dt)
+        next_angle = max(0.0, min(180.0, next_angle))
+        if abs(next_angle - self.pan_angle_float) >= 0.001:
+            self.pan_angle_float = next_angle
+            requested = int(round(self.pan_angle_float))
+            if requested != int(self.pan_angle_var.get()):
+                self.pan_angle_var.set(requested)
+                self._set_t("Pan Angle", f"{requested} deg")
+            self._send_pan_angle()
+        self.pan_motion_after_id = self.root.after(self.pan_smooth_interval_ms, self._tick_pan_motion_loop)
 
     def _toggle_connection(self) -> None:
         if self.connected:
@@ -411,12 +493,13 @@ class ControlLabApp:
         self.connection_var.set(f"Status: Connected ({port})")
         self._reset_telemetry()
         self._send_line("HELLO")
-        self._send_line("SONAR:ON" if self.sonar_enabled.get() else "SONAR:OFF")
+        self._send_line("SONAR:ON")
         self._on_pan_mode_toggle()
         self._poll_serial()
 
     def _disconnect(self) -> None:
         self._stop_pan_auto_loop()
+        self._stop_pan_motion_loop()
         self._stop_drive_keepalive()
         self._send_stop()
         if self.poll_after_id:
@@ -432,13 +515,15 @@ class ControlLabApp:
             self._send_stop()
 
     def _on_sonar_toggle(self) -> None:
-        self._set_t("Sonar Status", "AAN" if self.sonar_enabled.get() else "UIT")
-        self._send_line("SONAR:ON" if self.sonar_enabled.get() else "SONAR:OFF")
+        self._set_t("Sonar Status", "SCAN AAN" if self.sonar_enabled.get() else "HEAD STILL")
+        self._send_line("SONAR:ON")
         if self.sonar_enabled.get():
             if self.pan_auto.get():
                 self._start_pan_auto_loop()
         else:
             self._stop_pan_auto_loop()
+            self._send_line("PAN:MANUAL")
+            self._send_line("PAN:90")
 
     def _on_pan_mode_toggle(self) -> None:
         self._stop_pan_auto_loop()
@@ -489,41 +574,60 @@ class ControlLabApp:
     def _send_pan_angle(self) -> None:
         if self.pan_auto.get():
             return
-        # Firmware only accepts PAN:<angle>; for continuous top-servo use
-        # extremes to force max speed and center to stop.
-        requested = int(self.pan_angle_var.get())
-        if requested <= 85:
-            target = 0
-        elif requested >= 95:
-            target = 180
-        else:
-            target = 90
+        # Map slider around center to a reduced continuous-servo speed range.
+        # Inverted so UI direction matches expected head movement.
+        requested = max(0, min(180, int(self.pan_angle_var.get())))
+        self.pan_angle_float = float(requested)
+        centered = (requested - 90) / 90.0
+        inverted = -centered
+        scaled = inverted * self.pan_manual_scale
+        target = max(0, min(180, int(round(90 + (scaled * 90)))))
         self._send_line(f"PAN:{target}")
 
     def _clamped_pan_auto_speed(self) -> int:
         raw = int(self.pan_auto_speed_var.get())
-        return max(40, min(600, raw))
+        return max(10, min(600, raw))
 
     def _start_pan_auto_loop(self) -> None:
         if not self.connected or not self.serial.serial_port or not self.pan_auto.get() or not self.sonar_enabled.get():
             return
         self._stop_pan_auto_loop()
-        self.pan_auto_target_angle = 160
+        self.pan_auto_angle = float(self.pan_auto_min_angle)
+        self.pan_auto_direction = 1.0
+        self.pan_auto_last_tick_at = time.time()
+        self._send_line(f"PAN:{int(round(self.pan_auto_angle))}")
         self._tick_pan_auto_loop()
 
     def _stop_pan_auto_loop(self) -> None:
         if self.pan_auto_after_id is not None:
             self.root.after_cancel(self.pan_auto_after_id)
             self.pan_auto_after_id = None
+        self.pan_auto_last_tick_at = 0.0
 
     def _tick_pan_auto_loop(self) -> None:
         if not self.connected or not self.serial.serial_port or not self.pan_auto.get() or not self.sonar_enabled.get():
             self.pan_auto_after_id = None
             return
-        self._send_line(f"PAN:{self.pan_auto_target_angle}")
-        self.pan_auto_target_angle = 20 if self.pan_auto_target_angle >= 160 else 160
-        delay_ms = self._clamped_pan_auto_speed()
-        self.pan_auto_after_id = self.root.after(delay_ms, self._tick_pan_auto_loop)
+        now = time.time()
+        if self.pan_auto_last_tick_at <= 0:
+            dt = self.pan_auto_tick_ms / 1000.0
+        else:
+            dt = max(0.005, min(0.2, now - self.pan_auto_last_tick_at))
+        self.pan_auto_last_tick_at = now
+        speed_deg_per_s = float(self._clamped_pan_auto_speed())
+        next_angle = self.pan_auto_angle + (self.pan_auto_direction * speed_deg_per_s * dt)
+        if next_angle >= self.pan_auto_max_angle:
+            overshoot = next_angle - self.pan_auto_max_angle
+            next_angle = self.pan_auto_max_angle - overshoot
+            self.pan_auto_direction = -1.0
+        elif next_angle <= self.pan_auto_min_angle:
+            overshoot = self.pan_auto_min_angle - next_angle
+            next_angle = self.pan_auto_min_angle + overshoot
+            self.pan_auto_direction = 1.0
+        next_angle = max(self.pan_auto_min_angle, min(self.pan_auto_max_angle, next_angle))
+        self.pan_auto_angle = next_angle
+        self._send_line(f"PAN:{int(round(self.pan_auto_angle))}")
+        self.pan_auto_after_id = self.root.after(self.pan_auto_tick_ms, self._tick_pan_auto_loop)
 
     def _send_rgb(self) -> None:
         r = int(self.rgb_r_var.get())
@@ -687,7 +791,7 @@ class ControlLabApp:
             "Dichtste Afstand": "0 cm",
             "Batterij": "0%",
             "Navigatie Modus": "Offline",
-            "Sonar Status": "AAN",
+            "Sonar Status": "SCAN AAN",
             "Laatste Commando": "-",
             "RGB Status": "0,0,0",
             "Matrix": "-",
@@ -732,6 +836,7 @@ class ControlLabApp:
     def on_close(self) -> None:
         # Shutdown should not block on serial writes.
         self._stop_pan_auto_loop()
+        self._stop_pan_motion_loop()
         self._stop_drive_keepalive()
         if self.poll_after_id:
             try:
