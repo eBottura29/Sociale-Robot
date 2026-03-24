@@ -8,7 +8,7 @@
 
 **NIER** (Neural Interactive Emotional Robot) is een intelligente sociale robot gebouwd met Dwenguino die eenzaamheid helpt bestrijden door middel van AI-gestuurde conversaties, emotionele intelligentie en autonome navigatie.
 
-Dit is een REPO voor onze Sociale Robot genaamd NIER. Je kan de REPO [hier](https://github.com/eBottura29/Sociale-Robot) vinden
+Dit is een REPO voor onze Sociale Robot genaamd NIER. Je kan de REPO [hier](https://github.com/eBottura29/Sociale-Robot) vinden. Video van ons project: [YouTube](https://www.youtube.com/watch?v=XLFbnfXzv64)
 
 > *Een project voor de Sociale Robot Wedstrijd gehost door Dwengo VZW*
 
